@@ -16,7 +16,7 @@ DSH Desktop 支持**直接输入仓库地址安装**：
 3. 在「包名或地址」里输入本仓库地址：
 
    ```text
-   https://github.com/keyblues/dsh-plugin-fofatoto
+   https://github.com/keyblues/dsh-fofatoto
    ```
 
 4. 安装完成后进入本插件详情页，在配置卡片里粘贴 FOFA API Key（写入 Harness 凭据库，不落配置文件）；

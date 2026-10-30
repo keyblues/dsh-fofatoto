@@ -20,11 +20,11 @@
   "author": "keyblues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/keyblues/dsh-plugin-fofatoto.git"
+    "url": "git+https://github.com/keyblues/dsh-fofatoto.git"
   },
-  "homepage": "https://github.com/keyblues/dsh-plugin-fofatoto#readme",
+  "homepage": "https://github.com/keyblues/dsh-fofatoto#readme",
   "bugs": {
-    "url": "https://github.com/keyblues/dsh-plugin-fofatoto/issues"
+    "url": "https://github.com/keyblues/dsh-fofatoto/issues"
   },
   "engines": {
     "node": ">=20",
