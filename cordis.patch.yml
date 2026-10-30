@@ -1,0 +1,46 @@
+# dsh-fofatoto：FOFA 网络空间测绘 Host 插件。
+#
+# 配置项全部可选（代码内提供默认值）：
+#   apiKey              直接写入的 API Key；优先级最高，但建议改用插件页或凭据库。
+#   credentialRef       Harness 凭据库中的引用名，默认 FOFA_API_KEY。
+#   apiKeyEnv           环境变量名，默认 FOFA_KEY。
+#   baseUrl             接口地址。默认按「中转站」配置（https://fafaapi.info）；
+#                       官方账号请改成 https://fofa.info。也可在插件页卡片里直接改
+#                       （写入本 profile 的 cordis.patch.yml，热重载生效）。
+#                       账号信息接口不在配置里：按 fofatoto 的内置中转站表自动识别
+#                       （fafaapi.info -> /fofaapi/v1/validate-key），认不出则回官方
+#                       /api/v1/info/my；要加新中转站就改代码里的 RELAY_INFO_APIS。
+#   timeoutMs           单次接口超时（毫秒），默认 45000。
+#   retries             单次请求失败重试次数（1-4），默认 2。
+#   defaultFields       默认查询字段（逗号分隔）。
+#   outputDir           fofa_export 输出目录；留空表示 <会话工作区>/fofa-output。
+#   maxExportRows       单次导出条数上限，默认 50000（防止误拉爆额度）。
+#   maxExportSeconds    单次导出时间预算（秒），默认 240。到点主动收尾：已拉取的行
+#                       已增量落盘，返回 nextBefore 游标，可再用 appendTo 续拉。
+#                       工具超时 = maxExportSeconds + 60。
+#   rateLimitSeconds    深翻页批次间隔秒数，默认 5。
+#   fofatotoConfigPath  可选：本机 fofatoto 的 config.json 路径，在未配置 Key 时
+#                       复用其中的 key（对应 --icon/--check 之外的常规查询鉴权）。
+#
+# 推荐在「插件」页打开本插件详情，用卡片里的输入框保存 API Key：
+# 它写入 Harness 凭据库（不落 profile 配置文件、不回显），无需重启。
+# 也可以在本 profile 的 cordis.patch.yml 里按 id 覆盖 config，例如：
+#   - id: dsh-fofatoto
+#     config:
+#       baseUrl: https://fofa.info
+#       fofatotoConfigPath: '<你的 fofatoto 目录>/config.json'
+- insert:
+    - id: dsh-fofatoto
+      name: 'dsh-fofatoto'
+      config:
+        baseUrl: https://fafaapi.info
+        credentialRef: FOFA_API_KEY
+        apiKeyEnv: FOFA_KEY
+        timeoutMs: 45000
+        retries: 2
+        defaultFields: host,ip,port,protocol,domain,title
+        outputDir: ''
+        maxExportRows: 50000
+        maxExportSeconds: 240
+        rateLimitSeconds: 5
+        fofatotoConfigPath: ''

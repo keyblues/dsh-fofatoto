@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "FOFATOTO",
+    "description": "fofatoto (FOFA cyberspace mapping): account quota, FOFA query search, and full CSV/JSON/TXT export with automatic cursor pagination beyond 10,000 rows. Works with the official API and relay stations; configure the API key in the Plugins page."
+  }
+}

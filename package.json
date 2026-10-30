@@ -1,0 +1,66 @@
+{
+  "name": "dsh-fofatoto",
+  "version": "0.1.5",
+  "private": true,
+  "description": "DeepSeek Harness (DSH) plugin: fofatoto (FOFA cyberspace mapping) — account quota, query search, and deep export to CSV/JSON/TXT, with an API key configurable in the Plugins page. DSH 插件：fofatoto（FOFA 网络空间测绘）额度查询／语句检索／全量导出，插件页内配置 API Key。",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "fofa",
+    "fofatoto",
+    "cyberspace-mapping",
+    "asset-discovery",
+    "attack-surface",
+    "测绘",
+    "资产收集",
+    "攻击面"
+  ],
+  "license": "GPL-3.0-or-later",
+  "author": "keyblues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/keyblues/dsh-plugin-fofatoto.git"
+  },
+  "homepage": "https://github.com/keyblues/dsh-plugin-fofatoto#readme",
+  "bugs": {
+    "url": "https://github.com/keyblues/dsh-plugin-fofatoto/issues"
+  },
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.1-rc.3 <0.3.0-0"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "LICENSE",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
+    }
+  }
+}
