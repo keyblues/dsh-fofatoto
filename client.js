@@ -58,7 +58,6 @@ window.__ModuleLoader__.load({
         testOk: 'Connection works',
         testFailed: 'Connection failed',
         loadFailed: 'The configuration route is unreachable. Reload the page and retry.',
-        invalidDraft: 'Paste a complete API key first.',
         hintStorage:
           'The key is stored in the local Harness credential store (never written to the profile settings file and never echoed back); only the last characters are shown. The environment variable FOFA_KEY and the plugin config field apiKey are also accepted.',
         hintGenerate:
@@ -74,10 +73,8 @@ window.__ModuleLoader__.load({
         'tool.export': 'FOFA export',
         'tool.preparing': 'Preparing…',
         'tool.running': 'running',
-        'tool.done': 'done',
         'tool.failed': 'failed',
         'tool.query': 'query',
-        'tool.file': 'file',
         'tool.size': 'rows requested',
         'tool.page': 'page',
         'tool.fields': 'fields',
@@ -89,7 +86,6 @@ window.__ModuleLoader__.load({
         'tool.rows': 'rows',
         'tool.hit': 'matches',
         'tool.hitUnit': '',
-        'tool.pageRows': 'on this page',
         'tool.total': 'total matches',
         'tool.calls': 'API calls',
         'tool.duration': 'duration',
@@ -97,18 +93,18 @@ window.__ModuleLoader__.load({
         'tool.cursor': 'cursor',
         'tool.more': '…and',
         'tool.noRows': 'No rows on this page.',
-        'tool.accountType': 'account',
-        'tool.valid': 'valid',
-        'tool.invalid': 'invalid key',
+        'tool.uniqueIps': 'unique IPs',
+        'tool.output': 'Output',
+        'tool.errorOutput': 'Error',
+        'tool.validBadge': 'valid',
+        'tool.invalidBadge': 'invalid',
         'tool.yes': 'yes',
-        'tool.no': 'no',
         'tool.today': 'today left',
         'tool.remain': 'queries left',
         'tool.expiration': 'expires',
         'tool.firstUsed': 'first used',
         'tool.vipLevel': 'VIP level',
         'tool.server': 'server',
-        'tool.endpoint': 'endpoint',
         'tool.format': 'format',
         'tool.written': 'written',
         'tool.status': 'state',
@@ -154,7 +150,6 @@ window.__ModuleLoader__.load({
         testOk: '连接正常',
         testFailed: '连接失败',
         loadFailed: '配置接口不可达，请刷新页面重试。',
-        invalidDraft: '请先粘贴完整的 API Key。',
         hintStorage:
           'Key 保存在本机 Harness 凭据库（不写入 profile 配置文件、不回显），页面只显示尾号；也支持环境变量 FOFA_KEY 或插件配置 apiKey。',
         hintGenerate:
@@ -170,10 +165,8 @@ window.__ModuleLoader__.load({
         'tool.export': 'FOFA 导出',
         'tool.preparing': '准备中…',
         'tool.running': '执行中',
-        'tool.done': '完成',
         'tool.failed': '失败',
         'tool.query': '语句',
-        'tool.file': '文件',
         'tool.size': '条数',
         'tool.page': '页码',
         'tool.fields': '字段',
@@ -185,7 +178,6 @@ window.__ModuleLoader__.load({
         'tool.rows': '行',
         'tool.hit': '命中',
         'tool.hitUnit': '条',
-        'tool.pageRows': '本页',
         'tool.total': '总匹配',
         'tool.calls': '接口调用',
         'tool.duration': '耗时',
@@ -193,18 +185,18 @@ window.__ModuleLoader__.load({
         'tool.cursor': '游标',
         'tool.more': '…另有',
         'tool.noRows': '本页没有结果。',
-        'tool.accountType': '账户类型',
-        'tool.valid': 'Key 状态',
-        'tool.invalid': 'Key 无效',
+        'tool.uniqueIps': '去重 IP',
+        'tool.output': '输出',
+        'tool.errorOutput': '错误',
+        'tool.validBadge': '有效',
+        'tool.invalidBadge': '无效',
         'tool.yes': '有效',
-        'tool.no': '无效',
         'tool.today': '今日剩余',
         'tool.remain': '剩余查询',
         'tool.expiration': '到期',
         'tool.firstUsed': '首次使用',
         'tool.vipLevel': 'VIP 等级',
         'tool.server': 'fofa_server',
-        'tool.endpoint': '接口',
         'tool.format': '格式',
         'tool.written': '已写入',
         'tool.status': '停止原因',
@@ -326,7 +318,7 @@ window.__ModuleLoader__.load({
     /** Parse the model arguments of one tool block at any call stage. */
     function blockArgs(block) {
       if (block === null || block === undefined) return null;
-      const raw = typeof block.kind === 'string' ? (block.call === undefined ? undefined : block.call.argsRaw) : block.argsRaw;
+      const raw = typeof block.kind === 'string' ? block.call?.argsRaw : block.argsRaw;
       if (typeof raw !== 'string' || raw === '') return null;
       try {
         const parsed = JSON.parse(raw);
@@ -382,21 +374,206 @@ window.__ModuleLoader__.load({
       return /Full formatted result stored at|结果已落盘|spill/iu.test(blockText(block));
     }
 
-    /** One labeled key/value row. */
-    function kvRow(t, key, value) {
-      const text = value === null || value === undefined || value === '' ? '—' : String(value);
-      return h('div', { className: 'fft_kv' }, h('span', { className: 'fft_k' }, t(key)), h('span', { className: 'fft_v' }, text));
+    /** Official 16x16 outline glyph; the shipped rows use a 1px regular stroke. */
+    function outlineIcon(nodes, size, className, key) {
+      return h(
+        'svg',
+        {
+          width: size,
+          height: size,
+          viewBox: '0 0 16 16',
+          fill: 'none',
+          xmlns: 'http://www.w3.org/2000/svg',
+          'aria-hidden': 'true',
+          strokeWidth: 1,
+          className,
+          key,
+        },
+        ...nodes,
+      );
     }
 
-    /** One full-width configuration line (`语句: domain="…"`), monospaced. */
-    function cfgLine(t, key, value) {
-      const text = value === null || value === undefined || value === '' ? '—' : String(value);
+    /** One stroked outline path of an official glyph. */
+    function outlinePath(d, extra) {
+      return h('path', { d, stroke: 'currentColor', ...(extra === undefined ? {} : extra) });
+    }
+
+    /** Glyph of one FOFA wire tool: globe (account), magnifier (search), download (export). */
+    function toolIcon(toolName) {
+      if (toolName === 'fofa_search') {
+        return outlineIcon(
+          [
+            outlinePath(
+              'M6.58727 11.8586C9.55061 11.8586 11.9529 9.45637 11.9529 6.49304C11.9529 3.5297 9.55061 1.12744 6.58727 1.12744C3.62394 1.12744 1.22168 3.5297 1.22168 6.49304C1.22168 9.45637 3.62394 11.8586 6.58727 11.8586Z',
+            ),
+            outlinePath('M10.2991 10.3933L14.7783 14.8725'),
+          ],
+          14,
+        );
+      }
+      if (toolName === 'fofa_export') {
+        return outlineIcon(
+          [
+            outlinePath('M8 1.95317V10.0469'),
+            outlinePath('M4.25 6.29688L8 10.0469L11.75 6.29688'),
+            outlinePath(
+              'M1.5 10.0469V13.158C1.5 13.3937 1.60536 13.6198 1.79289 13.7865C1.98043 13.9532 2.23478 14.0469 2.5 14.0469H13.5C13.7652 14.0469 14.0196 13.9532 14.2071 13.7865C14.3946 13.6198 14.5 13.3937 14.5 13.158V10.0469',
+            ),
+          ],
+          14,
+        );
+      }
+      return outlineIcon(
+        [
+          outlinePath(
+            'M7.99986 14.0887C11.3626 14.0887 14.0886 11.3627 14.0886 7.99998C14.0886 4.63727 11.3626 1.91125 7.99986 1.91125C4.63715 1.91125 1.91113 4.63727 1.91113 7.99998C1.91113 11.3627 4.63715 14.0887 7.99986 14.0887Z',
+          ),
+          outlinePath('M2.34619 8H13.6538', { strokeLinecap: 'square' }),
+          outlinePath(
+            'M7.99976 14.0889C9.23509 14.0889 10.1743 11.3629 10.1743 8.00006C10.1743 4.63739 9.23509 1.91138 7.99976 1.91138',
+          ),
+          outlinePath(
+            'M7.99973 14.0889C6.76445 14.0889 5.8252 11.3629 5.8252 8.00006C5.8252 4.63739 6.76445 1.91138 7.99973 1.91138',
+          ),
+        ],
+        14,
+      );
+    }
+
+    /** Disclosure chevron; `open` points it up like the shipped rows. */
+    function chevronIcon(open, className, key) {
+      return outlineIcon(
+        [
+          open
+            ? outlinePath('M12 10L8.70711 6.70711C8.31658 6.31658 7.68342 6.31658 7.29289 6.70711L4 10')
+            : outlinePath('M4 6L7.29289 9.29289C7.68342 9.68342 8.31658 9.68342 8.70711 9.29289L12 6'),
+        ],
+        14,
+        className,
+        key,
+      );
+    }
+
+    /** Printable cell: never `undefined`/`null`/empty, which would collapse a row. */
+    function cellValue(value) {
+      if (value === null || value === undefined) return '—';
+      const text = String(value).trim();
+      return text === '' ? '—' : text;
+    }
+
+    /** One text run of the collapsed head; `masked` renders it for the shimmer sweep. */
+    function headText(masked, className, value, key) {
+      const shared = `fft_shimmerText ${className}`;
+      return masked
+        ? h('span', { key, className: shared, 'data-shimmer-text': value })
+        : h('span', { key, className: shared }, value);
+    }
+
+    /**
+     * Running-state sweep copied from the shipped tool row: the base content and
+     * an identical masked clone animate over each other. `render(masked)` must
+     * return the same node tree both times.
+     */
+    function shimmerLine(props) {
+      const active = props.active === true;
+      return h(
+        'span',
+        { className: 'fft_shimmer', 'data-shimmer': active ? '' : undefined },
+        h('span', { className: 'fft_shimmerContent' }, props.render(false)),
+        active
+          ? h(
+              'span',
+              { className: 'fft_shimmerDecoration', 'aria-hidden': 'true', inert: '' },
+              h(
+                'span',
+                { className: 'fft_shimmerSweep' },
+                h('span', { className: 'fft_shimmerContent fft_shimmerHighlight' }, props.render(true)),
+              ),
+            )
+          : null,
+      );
+    }
+
+    /** One `dt`/`dd` block of a details card (rows without a value are skipped). */
+    function fieldList(fields) {
+      const rows = fields
+        .filter((field) => field !== null && field !== undefined)
+        .map((field, index) =>
+          h(
+            'div',
+            { key: index, className: 'fft_detailsField' },
+            h('dt', null, field.label),
+            h('dd', null, field.mono === true && typeof field.value === 'string'
+              ? h('span', { className: 'fft_mono' }, field.value)
+              : field.value === null || field.value === undefined
+                ? '—'
+                : field.value),
+          ),
+        );
+      return rows.length === 0 ? null : h('dl', { className: 'fft_detailsFields' }, ...rows);
+    }
+
+    /** Heading line of a details item: text, or an openable path, plus an optional badge. */
+    function detailHeading(text, options) {
+      const settings = options === undefined ? {} : options;
+      const inner = settings.mono === true && typeof text === 'string' ? h('span', { className: 'fft_mono' }, text) : text;
+      const title = typeof settings.action === 'function'
+        ? h('button', { type: 'button', className: 'fft_detailsPath', title: settings.title, onClick: settings.action }, inner)
+        : h('span', { className: 'fft_detailsText' }, inner);
       return h(
         'div',
-        { className: 'fft_cfgLine' },
-        h('span', { className: 'fft_k' }, t(key)),
-        h('span', { className: 'fft_v fft_mono' }, text),
+        { className: 'fft_detailsHeading' },
+        title,
+        settings.badge === undefined
+          ? null
+          : h('span', { className: 'fft_detailsBadge', 'data-tone': settings.badge.tone }, settings.badge.label),
       );
+    }
+
+    /** Secondary line of a details item. */
+    function detailSubtitle(text) {
+      return h('div', { className: 'fft_detailsSubtitle' }, text);
+    }
+
+    /** Caption line of a details item (trailing hints, spilled notices). */
+    function detailDescription(text) {
+      return h('div', { className: 'fft_detailsDescription' }, text);
+    }
+
+    /** One bordered details card: a list of items built from heading/fields/notes. */
+    function detailsCard(items) {
+      const rows = items.filter((nodes) => nodes.filter((node) => node !== null && node !== undefined).length > 0);
+      if (rows.length === 0) return null;
+      return h(
+        'div',
+        { className: 'fft_detailsCard' },
+        h(
+          'ul',
+          { className: 'fft_detailsList' },
+          ...rows.map((nodes, index) =>
+            h('li', { key: index, className: 'fft_detailsItem' }, ...nodes.filter((node) => node !== null && node !== undefined)),
+          ),
+        ),
+      );
+    }
+
+    /** Shipped Input/Output panel: raw text for failures and unparsable results. */
+    function ioCard(label, text, isError) {
+      return h(
+        'div',
+        { className: 'fft_ioCard' },
+        h(
+          'div',
+          { className: 'fft_ioSection' },
+          h('span', { className: 'fft_ioLabel' }, label),
+          h('span', { className: 'fft_ioText', 'data-error': isError ? 'true' : undefined }, text),
+        ),
+      );
+    }
+
+    /** One trailing notice under a card (partial export, spilled preview). */
+    function cardNote(text, tone) {
+      return h('div', { className: 'fft_note', 'data-tone': tone }, text);
     }
 
     /**
@@ -416,96 +593,111 @@ window.__ModuleLoader__.load({
       return t(`tool.reason.${reason}`);
     }
 
-    /** Summary line of one settled tool value. */
-    function toolSummary(t, toolName, value) {
+    /**
+     * Collapsed-head text of one settled tool value: `summary` is what the call
+     * acted on and `suffix` is its one-line stat — the shipped row's
+     * `summary` + `summarySuffix` pair, so the head stays to two facts.
+     */
+    function toolHead(t, toolName, value) {
       if (toolName === 'fofa_account') {
         const account = value.account !== null && typeof value.account === 'object' ? value.account : {};
-        return [
-          account.type === 'relay' ? t('tool.relay') : account.type === 'standard' ? t('tool.standard') : '',
-          account.valid === true ? t('tool.yes') : t('tool.no'),
-          hasValue(account.todayRemaining) ? `${t('tool.today')} ${account.todayRemaining}` : '',
-        ]
-          .filter((part) => part !== '')
-          .join(' · ');
+        const type = account.type === 'relay' ? t('tool.relay') : account.type === 'standard' ? t('tool.standard') : '';
+        return {
+          summary: type,
+          suffix: hasValue(account.todayRemaining) ? `${t('tool.today')} ${account.todayRemaining}` : '',
+        };
       }
       if (toolName === 'fofa_search') {
-        const rows = Array.isArray(value.rows) ? value.rows.length : 0;
         const query = typeof value.query === 'string' ? value.query : '';
-        const head = [t('tool.hit'), String(value.total === undefined ? 0 : value.total), t('tool.hitUnit')]
-          .filter((part) => part !== '')
-          .join(' ');
-        return query === '' ? `${head} · ${t('tool.pageRows')} ${rows}` : `${head} · ${clip(query, 72)}`;
+        // The Host schema forbids a non-numeric total, but legacy or hand-made
+        // session events can still carry null/NaN; never print that into the head.
+        const total = hasValue(value.total) ? value.total : 0;
+        return {
+          summary: query === '' ? '' : clip(query, 72),
+          suffix: [t('tool.hit'), String(total), t('tool.hitUnit')].filter((part) => part !== '').join(' '),
+        };
       }
-      return [
-        typeof value.format === 'string' ? value.format : '',
-        Number.isInteger(value.written) ? `${value.written} ${t('tool.rows')}` : '',
-        value.partial === true ? t('tool.partial') : '',
-        typeof value.query === 'string' && value.query !== '' ? clip(value.query, 72) : '',
+      const written = Number.isInteger(value.written) ? `${value.written} ${t('tool.rows')}` : '';
+      const query = typeof value.query === 'string' ? value.query : '';
+      return {
+        summary: query !== '' ? clip(query, 72) : typeof value.path === 'string' ? clip(value.path, 72) : '',
+        suffix: [written, value.partial === true ? t('tool.partial') : ''].filter((part) => part !== '').join(' · '),
+      };
+    }
+
+    /** Preview rows of one search page rendered inside the card. */
+    const PREVIEW_ROWS = 8;
+
+    /** Body of one settled `fofa_account` call. */
+    function accountBody(t, value) {
+      const account = value.account !== null && typeof value.account === 'object' ? value.account : {};
+      const type = account.type === 'relay' ? t('tool.relay') : account.type === 'standard' ? t('tool.standard') : cellValue(account.type);
+      const valid = account.valid === true;
+      const meta = [
+        hasValue(value.httpStatus) ? `HTTP ${value.httpStatus}` : '',
+        typeof value.source === 'string' ? t(`source.${value.source}`) : '',
+        hasValue(account.baseUrl) ? String(account.baseUrl) : '',
       ]
         .filter((part) => part !== '')
         .join(' · ');
+      return [
+        detailsCard([
+          [
+            detailHeading(type, {
+              badge: { tone: valid ? 'success' : 'error', label: valid ? t('tool.validBadge') : t('tool.invalidBadge') },
+            }),
+            meta === '' ? null : detailSubtitle(meta),
+            fieldList([
+              { label: t('tool.today'), value: account.todayRemaining },
+              { label: t('tool.remain'), value: account.remainApiQuery },
+              { label: t('tool.expiration'), value: account.expiration },
+              { label: t('tool.firstUsed'), value: account.firstUsed },
+              { label: t('tool.vipLevel'), value: account.vipLevel },
+              { label: t('tool.server'), value: account.server, mono: true },
+            ]),
+          ],
+        ]),
+      ];
     }
 
-    /** Body nodes of one settled tool value. */
-    function toolBody(t, toolName, value, args, openFile) {
-      if (toolName === 'fofa_account') {
-        const account = value.account !== null && typeof value.account === 'object' ? value.account : {};
-        const type = account.type === 'relay' ? t('tool.relay') : account.type === 'standard' ? t('tool.standard') : account.type;
-        return [
-          h(
-            'div',
-            { className: 'fft_kvs' },
-            kvRow(t, 'tool.accountType', type),
-            kvRow(t, 'tool.valid', account.valid === true ? t('tool.yes') : t('tool.no')),
-            kvRow(t, 'tool.today', account.todayRemaining),
-            kvRow(t, 'tool.remain', account.remainApiQuery),
-            kvRow(t, 'tool.expiration', account.expiration),
-            kvRow(t, 'tool.firstUsed', account.firstUsed),
-            kvRow(t, 'tool.vipLevel', account.vipLevel),
-            kvRow(t, 'tool.server', account.server),
-            kvRow(t, 'tool.endpoint', account.baseUrl),
-          ),
-          h('div', { className: 'fft_meta' }, `HTTP ${value.httpStatus === undefined ? '—' : value.httpStatus} · ${t(`source.${value.source === undefined ? 'none' : value.source}`)}`),
-        ];
+    /** Body of one settled `fofa_search` call: request fields and preview rows. */
+    function searchBody(t, value) {
+      const rows = Array.isArray(value.rows) ? value.rows : [];
+      const shown = rows.slice(0, PREVIEW_ROWS);
+      const rowCount = Number.isInteger(value.rowCount) ? value.rowCount : rows.length;
+      const items = [
+        [
+          fieldList([
+            { label: t('tool.query'), value: value.query, mono: true },
+            { label: t('tool.size'), value: value.size },
+            { label: t('tool.page'), value: value.page },
+            { label: t('tool.fields'), value: value.fields },
+            hasValue(value.uniqueIps) ? { label: t('tool.uniqueIps'), value: value.uniqueIps } : null,
+          ]),
+        ],
+      ];
+      for (const row of shown) {
+        const target = row !== null && typeof row === 'object' ? row : {};
+        const address = [hasValue(target.ip) ? String(target.ip) : '', hasValue(target.port) ? String(target.port) : '']
+          .filter((part) => part !== '')
+          .join(':');
+        const title = cellValue(target.title);
+        const detail = [address, title === '—' ? '' : title].filter((part) => part !== '').join(' · ');
+        items.push([
+          detailHeading(hasValue(target.host) ? String(target.host) : cellValue(target.ip), { mono: true }),
+          detail === '' ? null : detailSubtitle(detail),
+        ]);
       }
-      if (toolName === 'fofa_search') {
-        const rows = Array.isArray(value.rows) ? value.rows : [];
-        const columns = ['host', 'ip', 'port', 'title'];
-        const shown = rows.slice(0, 8);
-        const rowCount = Number.isInteger(value.rowCount) ? value.rowCount : rows.length;
-        const nodes = [
-          h(
-            'div',
-            { className: 'fft_cfg' },
-            cfgLine(t, 'tool.query', value.query),
-            h('div', { className: 'fft_kvs' }, kvRow(t, 'tool.size', value.size), kvRow(t, 'tool.page', value.page), kvRow(t, 'tool.fields', value.fields)),
-          ),
-        ];
-        if (shown.length === 0) {
-          nodes.push(h('div', { className: 'fft_hint' }, t('tool.noRows')));
-          return nodes;
-        }
-        nodes.push(
-          h(
-            'div',
-            { className: 'fft_table' },
-            h('div', { className: 'fft_tr fft_th' }, ...columns.map((column) => h('span', { className: 'fft_td' }, column))),
-            ...shown.map((row) =>
-              h(
-                'div',
-                { className: 'fft_tr' },
-                ...columns.map((column) =>
-                  h('span', { className: 'fft_td' }, clip(row === null || row === undefined ? '' : row[column], 64)),
-                ),
-              ),
-            ),
-          ),
-        );
-        if (rowCount > shown.length) {
-          nodes.push(h('div', { className: 'fft_hint' }, `${t('tool.more')} ${rowCount - shown.length} ${t('tool.rows')}`));
-        }
-        return nodes;
+      if (shown.length === 0) items.push([detailDescription(t('tool.noRows'))]);
+      if (rowCount > shown.length) {
+        items.push([detailDescription(`${t('tool.more')} ${rowCount - shown.length} ${t('tool.rows')}`)]);
       }
+      return [detailsCard(items)];
+    }
+
+    /** Body of one settled `fofa_export` call: request config, file, counters. */
+    function exportBody(t, value, args, openFile) {
+      const request = args !== null && typeof args === 'object' ? args : {};
       const path = typeof value.path === 'string' ? value.path : '';
       const openPath = () => {
         if (path === '' || typeof openFile !== 'function') return;
@@ -515,55 +707,79 @@ window.__ModuleLoader__.load({
           // Opening is best effort: a stale path must never break the row.
         }
       };
-      const argsObject = args !== null && typeof args === 'object' ? args : {};
-      const nodes = [
-        h(
-          'div',
-          { className: 'fft_cfg' },
-          cfgLine(t, 'tool.query', typeof value.query === 'string' && value.query !== '' ? value.query : argsObject.query),
-          h(
-            'div',
-            { className: 'fft_kvs' },
-            kvRow(t, 'tool.limit', requestedRows(t, argsObject)),
-            kvRow(t, 'tool.fields', value.fields),
-            kvRow(t, 'tool.format', value.format),
-            kvRow(t, 'tool.dedup', value.dedup === '' ? '—' : value.dedup),
-            ...(Number.isFinite(argsObject.fill) && argsObject.fill !== 1 ? [kvRow(t, 'tool.fill', argsObject.fill)] : []),
-            ...(argsObject.full === true ? [kvRow(t, 'tool.full', t('tool.yes'))] : []),
-          ),
-        ),
-        h(
-          'div',
-          { className: 'fft_kv' },
-          h('span', { className: 'fft_k' }, t('tool.file')),
-          path === ''
-            ? h('span', { className: 'fft_v' }, '—')
-            : h('button', { type: 'button', className: 'fft_v fft_link fft_mono', title: path, onClick: openPath }, path),
-        ),
-        h(
-          'div',
-          { className: 'fft_kvs' },
-          kvRow(t, 'tool.written', Number.isInteger(value.written) ? `${value.written} ${t('tool.rows')}` : value.written),
-          kvRow(t, 'tool.total', value.total),
-          kvRow(t, 'tool.calls', value.apiCalls),
-          kvRow(t, 'tool.duration', Number.isInteger(value.durationMs) ? `${value.durationMs} ms` : value.durationMs),
-          kvRow(t, 'tool.status', reasonLabel(t, value.stoppedReason)),
-          kvRow(t, 'tool.cursor', value.nextBefore),
-        ),
+      const fileItem = [
+        detailHeading(path === '' ? '—' : path, {
+          mono: true,
+          title: path === '' ? undefined : path,
+          action: path === '' ? undefined : openPath,
+        }),
+        fieldList([
+          { label: t('tool.written'), value: Number.isInteger(value.written) ? `${value.written} ${t('tool.rows')}` : value.written },
+          { label: t('tool.total'), value: value.total },
+          { label: t('tool.calls'), value: value.apiCalls },
+          { label: t('tool.duration'), value: Number.isInteger(value.durationMs) ? `${value.durationMs} ms` : value.durationMs },
+          { label: t('tool.status'), value: reasonLabel(t, value.stoppedReason) },
+          { label: t('tool.cursor'), value: value.nextBefore, mono: true },
+        ]),
       ];
-      if (value.partial === true) nodes.push(h('div', { className: 'fft_hint fft_warn' }, t('tool.retryHint')));
+      const nodes = [
+        detailsCard([
+          [
+            fieldList([
+              {
+                label: t('tool.query'),
+                value: typeof value.query === 'string' && value.query !== '' ? value.query : request.query,
+                mono: true,
+              },
+              { label: t('tool.limit'), value: requestedRows(t, request) },
+              { label: t('tool.fields'), value: value.fields },
+              { label: t('tool.format'), value: value.format },
+              { label: t('tool.dedup'), value: value.dedup },
+              Number.isFinite(request.fill) && request.fill !== 1 ? { label: t('tool.fill'), value: request.fill } : null,
+              request.full === true ? { label: t('tool.full'), value: t('tool.yes') } : null,
+            ]),
+          ],
+          fileItem,
+        ]),
+      ];
+      if (value.partial === true) nodes.push(cardNote(t('tool.retryHint'), 'warn'));
       return nodes;
     }
 
-    /** One FOFA tool call rendered as a compact, expandable conversation card. */
+    /** Body of one running call: the request as far as it has arrived. */
+    function pendingBody(t, toolName, args) {
+      const request = args !== null && typeof args === 'object' ? args : {};
+      const rowsKey = toolName === 'fofa_export' ? 'tool.limit' : 'tool.size';
+      const rowsValue = toolName === 'fofa_export' ? request.limit : request.size;
+      return [
+        detailsCard([
+          [
+            fieldList([
+              {
+                label: t('tool.query'),
+                value: typeof request.query === 'string' && request.query !== '' ? request.query : t('tool.preparing'),
+                mono: true,
+              },
+              rowsValue === undefined ? null : { label: t(rowsKey), value: rowsValue },
+              typeof request.fields === 'string' && request.fields !== '' ? { label: t('tool.fields'), value: request.fields } : null,
+            ]),
+          ],
+        ]),
+      ];
+    }
+
+    /**
+     * One FOFA tool call rendered like a shipped Tool card: a disclosure head
+     * (glyph, title, separator, summary) and an expandable details body.
+     */
     function FofaToolRow(props) {
       const bound = props === null || props === undefined ? undefined : props.t;
       const t = React.useMemo(() => makeTranslator(bound), [bound]);
-      // Collapsed by default: the head summarizes the call, the body is one click away.
-      const [open, setOpen] = React.useState(false);
-      const block = props === null || props === undefined ? undefined : props.block;
       const phase = props === null || props === undefined ? undefined : props.phase;
+      const block = props === null || props === undefined ? undefined : props.block;
       const toolName = props === null || props === undefined || typeof props.toolName !== 'string' ? '' : props.toolName;
+      const openFile = props === null || props === undefined ? undefined : props.openFile;
+      const preparing = phase === 'preparing';
       const pending = phase !== 'result';
       const failed = !pending && block !== null && block !== undefined && block.isError === true;
       const args = React.useMemo(() => blockArgs(block), [block]);
@@ -571,56 +787,112 @@ window.__ModuleLoader__.load({
       const value = React.useMemo(() => (pending || failed ? null : blockValue(block)), [block, pending, failed]);
       const model = meta !== null ? meta : value;
       const spilled = !pending && !failed && meta !== null && value === null && contentSpilled(block);
-      const summary = React.useMemo(() => {
-        if (pending) return args !== null && typeof args.query === 'string' && args.query !== '' ? clip(args.query, 72) : t('tool.preparing');
-        if (failed) return clip(blockError(block), 120);
-        if (model === null) return clip(blockText(block), 140);
-        return toolSummary(t, toolName, model);
-      }, [pending, failed, args, model, t, toolName, block]);
-      const tone = pending ? 'muted' : failed ? 'error' : 'ok';
-      let body;
-      if (open) {
-        if (failed) body = h('div', { className: 'fft_hint fft_warn' }, clip(blockError(block), 1600));
-        else if (pending) {
-          const argsObject = args !== null && typeof args === 'object' ? args : {};
-          const rowsKey = toolName === 'fofa_export' ? 'tool.limit' : 'tool.size';
-          const rowsValue = toolName === 'fofa_export' ? argsObject.limit : argsObject.size;
-          const pendingRows = [];
-          if (rowsValue !== undefined) pendingRows.push(kvRow(t, rowsKey, rowsValue));
-          if (typeof argsObject.fields === 'string' && argsObject.fields !== '') {
-            pendingRows.push(kvRow(t, 'tool.fields', argsObject.fields));
-          }
-          body = h(
-            'div',
-            { className: 'fft_cfg' },
-            cfgLine(
-              t,
-              'tool.query',
-              typeof argsObject.query === 'string' && argsObject.query !== '' ? argsObject.query : t('tool.preparing'),
-            ),
-            pendingRows.length === 0 ? null : h('div', { className: 'fft_kvs' }, ...pendingRows),
-          );
-        } else if (model !== null) {
-          const bodyNodes = toolBody(t, toolName, model, args, props === null || props === undefined ? undefined : props.openFile);
-          if (spilled) bodyNodes.push(h('div', { className: 'fft_hint fft_warn' }, t('tool.spilled')));
-          body = h('div', { className: 'fft_toolBodyInner' }, ...bodyNodes);
-        } else body = h('div', { className: 'fft_hint' }, clip(blockText(block), 1600));
+      const head = React.useMemo(() => {
+        if (pending) {
+          return {
+            summary:
+              args !== null && typeof args.query === 'string' && args.query !== ''
+                ? clip(args.query, 72)
+                : t(preparing ? 'tool.preparing' : 'tool.running'),
+            suffix: '',
+          };
+        }
+        if (failed) return { summary: clip(blockError(block), 120), suffix: '' };
+        if (model === null) return { summary: clip(blockText(block), 140), suffix: '' };
+        return toolHead(t, toolName, model);
+      }, [pending, preparing, failed, args, model, t, toolName, block]);
+      // One stable disclosure Hook per mounted call: the conversation owner's
+      // Hook when it supplies one, local state otherwise. Choosing once keeps the
+      // Hook order stable for the card's lifetime.
+      function useLocalDisclosure() {
+        const [expanded, setExpanded] = React.useState(false);
+        return { expanded, toggle: () => setExpanded((current) => !current) };
+      }
+      const disclosureHook = React.useRef(null);
+      if (disclosureHook.current === null) {
+        const ownerHook = props !== null && props !== undefined && typeof props.useDisclosure === 'function' ? props.useDisclosure : null;
+        disclosureHook.current = ownerHook === null ? useLocalDisclosure : ownerHook;
+      }
+      const disclosure = disclosureHook.current();
+      const expandable = !preparing;
+      const expanded = expandable && disclosure.expanded === true;
+      const toggle = () => {
+        if (typeof disclosure.toggle === 'function') disclosure.toggle();
+      };
+      const onRowKeyDown = (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggle();
+      };
+      const state = pending ? (preparing ? 'preparing' : 'running') : failed ? 'error' : 'ok';
+      const statusText = pending ? t(preparing ? 'tool.preparing' : 'tool.running') : failed ? t('tool.failed') : null;
+      const title = toolTitle(t, toolName);
+      const summaryClass = failed ? 'fft_headSummary fft_errorSummary' : 'fft_headSummary';
+      const renderHead = (masked) => {
+        const nodes = [headText(masked, 'fft_headTitle', title, 'title')];
+        // A value without its usual summary (for example an account payload
+        // without a flavor) falls back to the stat so the row still reads
+        // `title · something` instead of `title something`.
+        const summaryText = head.summary !== '' ? head.summary : head.suffix;
+        if (summaryText !== '') {
+          nodes.push(h('span', { key: 'sep', className: 'fft_sep', 'data-shimmer-decoration': '', 'aria-hidden': true }));
+          nodes.push(headText(masked, summaryClass, summaryText, 'summary'));
+        }
+        if (head.summary !== '' && head.suffix !== '') nodes.push(headText(masked, 'fft_headSuffix', head.suffix, 'suffix'));
+        return nodes;
+      };
+      let bodyNodes = [];
+      if (expanded) {
+        if (failed) bodyNodes = [ioCard(t('tool.errorOutput'), clip(blockError(block), 1600), true)];
+        else if (pending) bodyNodes = pendingBody(t, toolName, args);
+        else if (model !== null) {
+          if (toolName === 'fofa_search') bodyNodes = searchBody(t, model);
+          else if (toolName === 'fofa_export') bodyNodes = exportBody(t, model, args, openFile);
+          else bodyNodes = accountBody(t, model);
+          if (spilled) bodyNodes.push(cardNote(t('tool.spilled'), 'warn'));
+        } else bodyNodes = [ioCard(t('tool.output'), clip(blockText(block), 1600), false)];
       }
       return h(
         'div',
-        { className: 'fft_tool', 'data-state': tone },
+        { className: 'fft_root', 'data-tool': toolName, 'data-state': state },
+        statusText === null ? null : h('span', { className: 'fft_visuallyHidden' }, statusText),
         h(
-          'button',
-          { type: 'button', className: 'fft_toolHead', 'aria-expanded': open, onClick: () => setOpen((current) => !current) },
-          h('span', { className: 'fft_chev' }, open ? '▾' : '▸'),
-          h('span', { className: 'fft_toolTitle' }, toolTitle(t, toolName)),
-          h('span', { className: 'fft_toolSummary' }, summary),
-          h('span', { className: 'fft_chip', 'data-tone': tone }, pending ? t('tool.running') : failed ? t('tool.failed') : t('tool.done')),
+          'div',
+          { className: 'fft_disclosure', 'data-open': expanded ? '' : undefined },
+          h(
+            'div',
+            { className: 'fft_headRow', 'data-disclosure-header': '' },
+            h(
+              'div',
+              {
+                className: 'fft_row',
+                'data-disclosure-row': '',
+                'data-expandable': expandable ? '' : undefined,
+                role: expandable ? 'button' : undefined,
+                tabIndex: expandable ? 0 : undefined,
+                'aria-expanded': expandable ? expanded : undefined,
+                onClick: expandable ? toggle : undefined,
+                onKeyDown: expandable ? onRowKeyDown : undefined,
+              },
+              h(
+                'span',
+                { className: 'fft_leading' },
+                expandable && !expanded
+                  ? [
+                      h('span', { key: 'glyph', className: 'fft_iconIdle' }, toolIcon(toolName)),
+                      chevronIcon(false, 'fft_chevronHover', 'chevron'),
+                    ]
+                  : expanded
+                    ? chevronIcon(true)
+                    : toolIcon(toolName),
+              ),
+              shimmerLine({ active: pending, render: renderHead }),
+            ),
+          ),
+          expanded ? h('div', { className: 'fft_bodyWrap' }, ...bodyNodes.filter((node) => node !== null && node !== undefined)) : null,
         ),
-        body === undefined ? null : h('div', { className: 'fft_toolBody' }, body),
       );
     }
-
 
     /** Read one JSON response, rejecting non-2xx and `ok: false` payloads. */
     async function readJson(response) {
@@ -952,7 +1224,7 @@ window.__ModuleLoader__.load({
 .fft_chip[data-tone=ok]{color:var(--dsw-alias-state-success-primary)}
 .fft_field{gap:6px;display:grid}
 .fft_fieldLabel{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
-.fft_input{box-sizing:border-box;width:100%;border-radius:var(--dsw-radius-sm);border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-primary);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;padding:6px 10px}
+.fft_input{box-sizing:border-box;width:100%;border-radius:var(--dsw-radius-sm);border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;line-height:20px;padding:6px 10px}
 .fft_input:focus{outline:none;border-color:var(--dsw-alias-brand-primary)}
 .fft_input::placeholder{color:var(--dsw-alias-label-tertiary)}
 .fft_input:disabled{opacity:.6}
@@ -969,31 +1241,76 @@ window.__ModuleLoader__.load({
 .fft_quota{color:var(--dsw-alias-label-secondary);margin:0;font-size:12px;line-height:18px;word-break:break-word}
 .fft_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11px;line-height:1.6}
 .fft_meta{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11px;line-height:1.6;word-break:break-all}
-.fft_tool{box-sizing:border-box;width:100%;max-width:100%;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);overflow:hidden;margin:2px 0}
-.fft_tool[data-state=error]{border-color:var(--dsw-alias-state-error-primary)}
-.fft_toolHead{align-items:center;gap:8px;width:100%;box-sizing:border-box;border:none;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer;display:flex;padding:6px 10px}
-.fft_toolHead:hover{background:var(--dsw-alias-interactive-bg-hover)}
-.fft_chev{color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:1;flex:none}
-.fft_toolTitle{color:var(--dsw-alias-label-primary);font-weight:500;font-size:13px;line-height:20px;flex:none}
-.fft_toolSummary{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.fft_toolBody{border-top:1px solid var(--dsw-alias-border-l2);padding:8px 10px 10px}
-.fft_toolBodyInner{gap:8px;display:grid}
 .fft_chip[data-tone=error]{color:var(--dsw-alias-state-error-primary)}
 .fft_chip[data-tone=muted]{color:var(--dsw-alias-label-tertiary)}
-.fft_kvs{display:grid;gap:2px 12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
-.fft_cfg{display:grid;gap:4px}
-.fft_cfgLine{align-items:baseline;gap:6px;display:flex;min-width:0;font-size:12px;line-height:18px}
-.fft_kv{display:flex;gap:6px;font-size:12px;line-height:18px;min-width:0}
-.fft_k{color:var(--dsw-alias-label-tertiary);flex:none}
-.fft_v{color:var(--dsw-alias-label-primary);min-width:0;overflow-wrap:anywhere}
-.fft_mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px}
-.fft_link{background:none;border:none;padding:0;color:var(--dsw-alias-brand-primary);cursor:pointer;text-align:left;font:inherit;overflow-wrap:anywhere}
-.fft_table{display:grid;border:1px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);overflow:hidden}
-.fft_tr{display:grid;grid-template-columns:1.4fr 1fr .5fr 1.6fr;gap:8px;padding:4px 8px;font-size:11px;line-height:16px;border-top:1px solid var(--dsw-alias-border-l2)}
-.fft_tr:first-child{border-top:none}
-.fft_th{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-tertiary)}
-.fft_td{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.fft_warn{color:var(--dsw-alias-state-error-primary)}
+/* Conversation tool cards. Layout, states, and motion are copied from the
+   shipped ToolRow / DisclosureRow / details card so a third-party tool reads
+   like a first-party one; every class is plugin-local and every color comes
+   from a host theme token. */
+.fft_root{display:flex;flex-direction:column}
+.fft_visuallyHidden{clip:rect(0 0 0 0);white-space:nowrap;width:1px;height:1px;position:absolute;overflow:hidden}
+.fft_disclosure{display:flex;flex-direction:column;width:100%;min-width:0}
+.fft_headRow{display:flex;align-items:center;min-width:0}
+.fft_row{flex:1 1 auto;position:relative;overflow:hidden;display:flex;align-items:center;height:calc(24px + var(--dsh-content-font-delta,0px));min-width:0;color:var(--dsw-alias-label-tertiary);transition:color .1s ease}
+.fft_row[data-expandable]{cursor:pointer}
+.fft_row:hover{color:var(--dsw-alias-label-secondary)}
+.fft_leading{position:relative;flex:none;width:calc(16px + var(--dsh-content-font-delta,0px));height:calc(16px + var(--dsh-content-font-delta,0px));display:inline-flex;align-items:center;justify-content:center;margin-right:6px;padding:0;border:none;background:none;color:inherit}
+.fft_leading svg:not([data-state]){width:calc(14px + var(--dsh-content-font-delta,0px));height:calc(14px + var(--dsh-content-font-delta,0px))}
+.fft_iconIdle{display:inline-flex;opacity:1;transition:opacity .1s ease}
+.fft_chevronHover{position:absolute;inset:0;margin:auto;opacity:0;transition:opacity .1s ease}
+.fft_row:hover .fft_iconIdle{opacity:0}
+.fft_row:hover .fft_chevronHover{opacity:1}
+.fft_headTitle{flex:none;font-weight:400;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(24px + var(--dsh-content-font-delta,0px));color:inherit}
+.fft_sep{background:var(--dsw-alias-label-caption);border-radius:1px;flex:none;display:block;width:2px;height:2px;margin:0 8px}
+.fft_headSummary{text-overflow:ellipsis;white-space:nowrap;min-width:0;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(24px + var(--dsh-content-font-delta,0px));flex:auto;overflow:hidden}
+.fft_headSuffix{white-space:nowrap;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(24px + var(--dsh-content-font-delta,0px));flex:none;margin-left:4px}
+.fft_errorSummary{color:var(--dsw-alias-state-error-primary)}
+.fft_shimmer{position:relative;display:inline-grid;width:max-content;max-width:100%;min-width:0;vertical-align:top;color:inherit}
+.fft_shimmerContent{display:flex;align-items:center;min-width:0}
+.fft_shimmerText{color:inherit}
+.fft_shimmerText[data-shimmer-text]:after{content:attr(data-shimmer-text)}
+.fft_shimmerDecoration{position:absolute;inset:0;overflow:clip;pointer-events:none;user-select:none}
+.fft_shimmerSweep{position:absolute;inset:0;overflow:hidden;color:var(--dsw-alias-label-shimmer);mask-image:linear-gradient(105deg,transparent 0%,black 40% 60%,transparent 100%);transform:translate(-100%);animation:fft-sweep 1.5s steps(48,end) .3s infinite}
+.fft_shimmerSweep *{color:inherit!important}
+.fft_shimmerSweep [data-shimmer-decoration]{background:currentColor}
+.fft_shimmerHighlight{width:100%;height:100%;transform:translate(100%);animation:fft-highlight 1.5s steps(48,end) .3s infinite}
+@keyframes fft-sweep{0%{transform:translate(-100%)}66.6667%,to{transform:translate(100%)}}
+@keyframes fft-highlight{0%{transform:translate(100%)}66.6667%,to{transform:translate(-100%)}}
+@media(prefers-reduced-motion:reduce){.fft_row{transition:none}.fft_shimmerDecoration{display:none}.fft_shimmerSweep,.fft_shimmerHighlight{animation:none}}
+.fft_bodyWrap{flex-direction:column;display:flex}
+.fft_detailsCard{border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-markdown-code-block);color:var(--dsw-alias-label-secondary);font:var(--dsw-font-xs-13);margin:4px 0 4px 4px;overflow:hidden}
+.fft_detailsList{max-height:none;margin:0;padding:0;list-style:none;overflow:visible}
+.fft_detailsItem{margin:0;padding:10px 14px}
+.fft_detailsItem+.fft_detailsItem{border-top:.5px solid var(--dsw-alias-border-l2)}
+.fft_detailsHeading{flex-wrap:wrap;align-items:baseline;gap:8px;display:flex}
+.fft_detailsText{white-space:pre-wrap;overflow-wrap:anywhere;flex:1;min-width:0}
+.fft_detailsFields{margin:0}
+.fft_detailsHeading+.fft_detailsFields{margin-top:6px}
+.fft_detailsField{grid-template-columns:5.5em minmax(0,1fr);gap:12px;display:grid}
+.fft_detailsField+.fft_detailsField{margin-top:4px}
+.fft_detailsField dt{color:var(--dsw-alias-label-caption)}
+.fft_detailsField dd{white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
+.fft_detailsSubtitle{color:var(--dsw-alias-label-tertiary);overflow-wrap:anywhere;margin-top:3px;font-size:12px}
+.fft_detailsDescription{color:var(--dsw-alias-label-caption);white-space:pre-wrap;overflow-wrap:anywhere;margin:6px 0}
+.fft_detailsBadge{color:var(--dsw-alias-label-caption);flex:none;align-items:center;gap:5px;font-size:12px;display:inline-flex}
+.fft_detailsBadge:before{content:"";corner-shape:round;background:currentColor;border-radius:50%;width:5px;height:5px}
+.fft_detailsBadge[data-tone=info]{color:var(--dsw-alias-state-business-primary)}
+.fft_detailsBadge[data-tone=success]{color:var(--dsw-alias-state-success-primary)}
+.fft_detailsBadge[data-tone=warning]{color:var(--dsw-alias-state-warn-primary)}
+.fft_detailsBadge[data-tone=error]{color:var(--dsw-alias-state-error-primary)}
+.fft_detailsPath{min-width:0;color:inherit;font:inherit;text-align:start;overflow-wrap:anywhere;cursor:pointer;background:0 0;border:none;flex:1;padding:0}
+.fft_detailsPath:hover{text-decoration:underline}
+.fft_detailsPath:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}
+.fft_ioCard{border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-markdown-code-block);font:var(--dsw-font-markdown-code-block-small);flex-direction:column;margin:4px 0 4px 4px;display:flex}
+.fft_ioSection{grid-template-columns:max-content 1fr;align-items:baseline;column-gap:14px;max-height:150px;padding:12px 16px;display:grid;overflow-y:auto}
+.fft_ioSection::-webkit-scrollbar-thumb{border-radius:var(--dsw-radius-sm);background-clip:padding-box;border:2px solid transparent}
+.fft_ioSection::-webkit-scrollbar-track{margin:6px 0}
+.fft_ioLabel{color:var(--dsw-alias-label-caption);align-self:start;position:sticky;top:0}
+.fft_ioText{white-space:pre-wrap;word-break:break-word;min-width:0;color:var(--dsw-alias-label-secondary)}
+.fft_ioText[data-error]{color:var(--dsw-alias-state-error-primary)}
+.fft_mono{font-family:var(--ds-font-family-code)}
+.fft_note{white-space:pre-wrap;overflow-wrap:anywhere;font:var(--dsw-font-xs-13);color:var(--dsw-alias-label-tertiary);margin:4px 0 4px 4px}
+.fft_note[data-tone=warn]{color:var(--dsw-alias-state-warn-primary)}
 `;
 
     /** Register the card and own its dictionary and stylesheet. */
