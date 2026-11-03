@@ -983,7 +983,7 @@ test('base url normalization and status shape', () => {
 
 test('endpoint settings persist through the config editor contract', async () => {
   const calls = [];
-  const entry = { options: { id: 'dsh-fofatoto', name: 'dsh-fofatoto', config: { baseUrl: 'https://fofa.info', timeoutMs: 45000 } } };
+  const entry = { options: { id: 'fofatoto', name: 'dsh-fofatoto', config: { baseUrl: 'https://fofa.info', timeoutMs: 45000 } } };
   const ctx = {
     get: (name) =>
       name === 'configEditor'
@@ -1006,6 +1006,8 @@ test('endpoint settings persist through the config editor contract', async () =>
 
 test('settings routes: guard, endpoint persistence and input validation', async () => {
   const edits = [];
+  // Legacy profile: the row id still mirrors the package name; the lookup must
+  // fall back to the module name now that the bundle inserts `id: fofatoto`.
   const entry = { options: { id: 'dsh-fofatoto', name: 'dsh-fofatoto', config: {} } };
   const ctx = {
     get: (name) => {

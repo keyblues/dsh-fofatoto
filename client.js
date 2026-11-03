@@ -27,6 +27,12 @@ window.__ModuleLoader__.load({
      */
     const ROUTE_SETTINGS = '/plugins/dsh-fofatoto/settings';
     const ROUTE_TEST = '/plugins/dsh-fofatoto/test';
+    /**
+     * Upstream fofatoto project this plugin ports to DSH; rendered as a real
+     * anchor because the Plugins page prints the bundle's locale description
+     * as plain text, where a URL cannot be clicked.
+     */
+    const PROJECT_URL = 'https://github.com/keyblues/fofatoto';
 
     const DICT = {
       en: {
@@ -63,6 +69,7 @@ window.__ModuleLoader__.load({
         hintGenerate:
           'Get the key in FOFA under Personal center → API key, or from the fafaapi.info relay console; the full key is shown only once.',
         endpoint: 'Endpoint',
+        project: 'Project',
         quotaRelay: 'Relay',
         quotaStandard: 'Standard',
         quotaToday: 'today left',
@@ -155,6 +162,7 @@ window.__ModuleLoader__.load({
         hintGenerate:
           'Key 获取方式：FOFA 个人中心 → API 密钥（或中转站 fafaapi.info 的 Key）。',
         endpoint: '接口地址',
+        project: '项目地址',
         quotaRelay: '中转站',
         quotaStandard: '标准版',
         quotaToday: '今日剩余',
@@ -1211,6 +1219,16 @@ window.__ModuleLoader__.load({
         quotaText !== '' ? h('p', { className: 'fft_quota' }, quotaText) : null,
         h('p', { className: 'fft_hint' }, t('hintStorage')),
         h('p', { className: 'fft_hint' }, t('hintGenerate')),
+        h(
+          'p',
+          { className: 'fft_hint' },
+          `${t('project')}: `,
+          h(
+            'a',
+            { className: 'fft_link', href: PROJECT_URL, target: '_blank', rel: 'noopener noreferrer' },
+            PROJECT_URL,
+          ),
+        ),
         h('p', { className: 'fft_meta' }, `${t('endpoint')}: ${ready ? savedBaseUrl || '—' : '—'}`),
       );
     }
@@ -1240,6 +1258,8 @@ window.__ModuleLoader__.load({
 .fft_notice[data-tone=error]{color:var(--dsw-alias-state-error-primary)}
 .fft_quota{color:var(--dsw-alias-label-secondary);margin:0;font-size:12px;line-height:18px;word-break:break-word}
 .fft_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11px;line-height:1.6}
+.fft_link{color:var(--dsw-alias-brand-primary);text-decoration:none;word-break:break-all}
+.fft_link:hover{text-decoration:underline}
 .fft_meta{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11px;line-height:1.6;word-break:break-all}
 .fft_chip[data-tone=error]{color:var(--dsw-alias-state-error-primary)}
 .fft_chip[data-tone=muted]{color:var(--dsw-alias-label-tertiary)}

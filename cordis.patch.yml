@@ -25,12 +25,15 @@
 # 推荐在「插件」页打开本插件详情，用卡片里的输入框保存 API Key：
 # 它写入 Harness 凭据库（不落 profile 配置文件、不回显），无需重启。
 # 也可以在本 profile 的 cordis.patch.yml 里按 id 覆盖 config，例如：
-#   - id: dsh-fofatoto
+#   - id: fofatoto
 #     config:
 #       baseUrl: https://fofa.info
 #       fofatotoConfigPath: '<你的 fofatoto 目录>/config.json'
+#
+# 行 id 用短名 fofatoto，模块名才是包名 dsh-fofatoto：插件页「组件」卡片会同时
+# 显示 Loader 行 id 与模块名（两者都跟 dsh-fofatoto 一样就会显示成重复两行）。
 - insert:
-    - id: dsh-fofatoto
+    - id: fofatoto
       name: 'dsh-fofatoto'
       config:
         baseUrl: https://fafaapi.info

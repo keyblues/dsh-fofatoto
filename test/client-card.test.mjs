@@ -215,6 +215,20 @@ test('client half registers the settings card and one tool card per wire tool', 
   }
 });
 
+test('settings card links to the upstream fofatoto project', async () => {
+  const { registrations, react } = await loadClient();
+  const card = registrations.find((entry) => entry.options.name === 'plugins.bundle.config').component;
+  react.reset();
+  react.begin();
+  const tree = card({ view: 'page', t: (key) => key });
+  const link = find(tree, (node) => node.type === 'a');
+  assert.ok(link, 'the settings card renders an anchor');
+  assert.equal(link.props.href, 'https://github.com/keyblues/fofatoto');
+  assert.equal(link.props.target, '_blank');
+  assert.equal(link.props.rel, 'noopener noreferrer');
+  assert.match(textsOf(tree).join('|'), /https:\/\/github\.com\/keyblues\/fofatoto/u);
+});
+
 test('tool cards use the shipped row contract: root state, glyph, disclosure row', async () => {
   const { registrations, react } = await loadClient();
   const card = registrations.find((entry) => entry.options.name === 'tool.call.toolview').component;

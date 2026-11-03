@@ -48,6 +48,14 @@ const MAX_EXPORT_ROWS_CAP = 200000;
 const USER_AGENT = 'dsh-fofatoto/0.1';
 const DEFAULT_FIELD_LIST = ['host', 'ip', 'port', 'protocol', 'domain', 'title'];
 const DEFAULT_FIELDS = DEFAULT_FIELD_LIST.join(',');
+/**
+ * Loader row id this bundle inserts (cordis.patch.yml) and the module/package
+ * name it loads. They differ on purpose: the Plugins page shows both the row
+ * id and the module name, so reusing the package name as the row id makes the
+ * component card print the same string twice.
+ */
+const PLUGIN_ROW_ID = 'fofatoto';
+const PLUGIN_MODULE = 'dsh-fofatoto';
 
 /**
  * Field universe of the FOFA result model (order = default export column order).
@@ -256,16 +264,21 @@ async function keyStatus(ctx, config) {
 /**
  * Persist baseUrl through the Host config editor, which writes the profile
  * patch and reconciles the Loader so the change is live.
+ *
+ * The row is matched by its short Loader id first and by module name second,
+ * so a profile still carrying the old `dsh-fofatoto` row id (before the id was
+ * split from the package name) keeps saving through the same code path.
  */
 async function saveEndpointConfig(ctx, changes) {
   const editor = ctx.get('configEditor');
   if (editor === undefined || typeof editor.edit !== 'function') {
-    throw new Error('当前环境不支持在插件页保存接口地址：请修改本 profile 的 cordis.patch.yml 中 dsh-fofatoto 行的 baseUrl。');
+    throw new Error(ENDPOINT_UNEDITABLE_MESSAGE);
   }
   const entries = typeof editor.entries === 'function' ? editor.entries() : [];
-  const entry = entries.find((candidate) => candidate?.options?.id === 'dsh-fofatoto');
+  const entry = entries.find((candidate) => candidate?.options?.id === PLUGIN_ROW_ID)
+    ?? entries.find((candidate) => candidate?.options?.name === PLUGIN_MODULE);
   if (entry === undefined) {
-    throw new Error('找不到本插件在 profile 中的配置行（id: dsh-fofatoto），无法保存接口地址；请改用 cordis.patch.yml。');
+    throw new Error(`找不到本插件在 profile 中的配置行（id: ${PLUGIN_ROW_ID}），无法保存接口地址；请改用 cordis.patch.yml。`);
   }
   await editor.edit(entry, (current) => {
     const next = { ...(current ?? {}) };
@@ -278,12 +291,16 @@ async function saveEndpointConfig(ctx, changes) {
   });
 }
 
+/** Shown wherever the Host cannot persist an endpoint override from the card. */
+const ENDPOINT_UNEDITABLE_MESSAGE =
+  `当前环境不支持在插件页保存接口地址：请修改本 profile 的 cordis.patch.yml 中 ${PLUGIN_ROW_ID} 行的 baseUrl。`;
+
 const MISSING_KEY_MESSAGE = [
   '尚未配置 FOFA API Key。',
   '配置方式（任选其一）：',
   '1) 在 DSH「插件」页打开 dsh-fofatoto，在配置卡片中粘贴 API Key 并保存（推荐，写入本机 Harness 凭据库）；',
   '2) 设置环境变量 FOFA_KEY 后重启 Harness；',
-  '3) 在本 profile 的 cordis.patch.yml 中为 dsh-fofatoto 行设置 config.apiKey；',
+  '3) 在本 profile 的 cordis.patch.yml 中为 fofatoto 行设置 config.apiKey；',
   '4) 在插件配置里把 fofatotoConfigPath 指向本机 fofatoto 的 config.json，复用其中的 key。',
 ].join('\n');
 
@@ -1720,7 +1737,7 @@ function registerRoutes(ctx, webServer, config) {
             if (!editable) {
               sendJson(res, 200, {
                 ok: false,
-                error: '当前环境不支持在插件页保存接口地址：请修改本 profile 的 cordis.patch.yml 中 dsh-fofatoto 行的 baseUrl。',
+                error: ENDPOINT_UNEDITABLE_MESSAGE,
               });
               return;
             }
