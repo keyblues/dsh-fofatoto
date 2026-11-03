@@ -1,7 +1,6 @@
 {
   "name": "dsh-fofatoto",
   "version": "0.1.6",
-  "private": true,
   "description": "DeepSeek Harness (DSH) plugin: fofatoto (FOFA cyberspace mapping) — account quota, query search, and deep export to CSV/JSON/TXT, with an API key configurable in the Plugins page. DSH 插件：fofatoto（FOFA 网络空间测绘）额度查询／语句检索／全量导出，插件页内配置 API Key。",
   "keywords": [
     "dsh",
@@ -28,10 +27,11 @@
   },
   "engines": {
     "node": ">=20",
-    "dsh": ">=0.2.1-rc.3 <0.3.0-0"
+    "dsh": ">=0.2.1-rc.5 <0.3.0-0"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "prepublishOnly": "node --test"
   },
   "type": "module",
   "exports": {
@@ -49,6 +49,10 @@
     "LICENSE",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
