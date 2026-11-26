@@ -1,17 +1,4 @@
-/**
- * FOFA 网络空间测绘 (fofatoto) — DSH Client half.
- *
- * Renders the API-key configuration card inside this bundle's page on the
- * Plugins page (`plugins.bundle.config`, keyed by the bundle package name),
- * exactly like the shipped "思考过程机器翻译" bundle: no separate settings
- * page, everything is configured where the plugin itself is listed.
- *
- * The card only talks to the Host half's same-origin routes; the API key is
- * written to the Harness credential store and never sent back to the page.
- * Besides the key, it exposes the two user-editable endpoints (base URL and
- * the account-info API template) unless the Host marks them as pinned by the
- * profile's cordis.patch.yml (`editable: false`).
- */
+/** DSH client for the FOFA settings and conversation cards. */
 window.__ModuleLoader__.load({
   id: 'dsh-fofatoto',
   factory(require) {
@@ -27,54 +14,39 @@ window.__ModuleLoader__.load({
      */
     const ROUTE_SETTINGS = '/plugins/dsh-fofatoto/settings';
     const ROUTE_TEST = '/plugins/dsh-fofatoto/test';
-    /**
-     * Upstream fofatoto project this plugin ports to DSH; rendered as a real
-     * anchor because the Plugins page prints the bundle's locale description
-     * as plain text, where a URL cannot be clicked.
-     */
     const PROJECT_URL = 'https://github.com/keyblues/fofatoto';
 
     const DICT = {
       en: {
-        title: 'FOFATOTO',
-        'status.loading': 'Reading configuration…',
+        'status.loading': 'Loading…',
+        'status.error': 'Settings unavailable',
         'status.configured': 'Configured',
-        'status.missing': 'No API key yet',
+        'status.missing': 'API key required',
         'source.credential': 'Harness credentials',
         'source.config': 'plugin config',
         'source.env': 'environment variable',
         'source.file': 'fofatoto config',
         'source.none': 'none',
         keyLabel: 'API key',
-        keyPlaceholder: 'Paste the FOFA API key (or the fafaapi.info relay key)',
-        baseUrlLabel: 'Base URL',
-        baseUrlPlaceholder: 'https://fofa.info',
-        endpointNotEditable: "Base URL is pinned by this profile's cordis.patch.yml; edit that file to change it.",
-        invalidBaseUrl: 'Base URL must be a valid http(s) URL.',
-        endpointSavedRestart: 'Saved; restart Harness to apply.',
+        keyPlaceholder: 'Paste your API key',
+        baseUrlLabel: 'API URL',
+        endpointNotEditable: 'Edit the API URL in cordis.patch.yml.',
+        invalidBaseUrl: 'Enter a full HTTP or HTTPS URL.',
+        endpointSavedRestart: 'Saved. Restart Harness to apply.',
         save: 'Save',
         saving: 'Saving…',
         test: 'Test connection',
         testing: 'Testing…',
         clear: 'Remove key',
         clearing: 'Removing…',
-        confirmClear: 'Remove the stored FOFA API key?',
+        confirmClear: 'Remove the saved API key?',
         saved: 'Saved.',
         cleared: 'API key removed.',
-        testOk: 'Connection works',
-        testFailed: 'Connection failed',
-        loadFailed: 'The configuration route is unreachable. Reload the page and retry.',
-        hintStorage:
-          'The key is stored in the local Harness credential store (never written to the profile settings file and never echoed back); only the last characters are shown. The environment variable FOFA_KEY and the plugin config field apiKey are also accepted.',
-        hintGenerate:
-          'Get the key in FOFA under Personal center → API key, or from the fafaapi.info relay console; the full key is shown only once.',
-        endpoint: 'Endpoint',
-        project: 'Project',
-        quotaRelay: 'Relay',
-        quotaStandard: 'Standard',
-        quotaToday: 'today left',
-        quotaRemain: 'queries left',
-        quotaExpiration: 'expires',
+        testOk: 'Connection OK',
+        reloadHint: 'Reload the page to try again.',
+        hintStorage: 'Saved to Harness credentials. Only the key suffix is shown.',
+        hintGenerate: 'Find your API key in your FOFA account.',
+        project: 'fofatoto project',
         'tool.account': 'FOFA account',
         'tool.search': 'FOFA search',
         'tool.export': 'FOFA export',
@@ -116,8 +88,8 @@ window.__ModuleLoader__.load({
         'tool.written': 'written',
         'tool.status': 'state',
         'tool.partial': 'partial',
-        'tool.spilled': 'The full result was spilled to disk; this card shows the durable preview.',
-        'tool.retryHint': 'Not finished yet: rerun with appendTo to continue.',
+        'tool.spilled': 'Full results saved to disk.',
+        'tool.retryHint': 'Use appendTo to resume.',
         'tool.relay': 'relay',
         'tool.standard': 'standard',
         'tool.reason.exhausted': 'exhausted',
@@ -129,45 +101,35 @@ window.__ModuleLoader__.load({
         'tool.reason.empty': 'no matches',
       },
       zh: {
-        title: 'FOFATOTO',
-        'status.loading': '正在读取配置…',
+        'status.loading': '读取中…',
+        'status.error': '配置加载失败',
         'status.configured': '已配置',
-        'status.missing': '尚未配置 API Key',
+        'status.missing': '未配置 API Key',
         'source.credential': 'Harness 凭据库',
         'source.config': '插件配置',
         'source.env': '环境变量',
         'source.file': 'fofatoto 配置',
         'source.none': '无',
         keyLabel: 'API Key',
-        keyPlaceholder: '粘贴 FOFA API Key（或中转站 fafaapi.info 的 Key）',
+        keyPlaceholder: '粘贴 API Key',
         baseUrlLabel: '接口地址',
-        baseUrlPlaceholder: 'https://fofa.info',
-        endpointNotEditable: '接口地址由本 profile 的 cordis.patch.yml 固定，只读；如需修改请编辑该文件。',
-        invalidBaseUrl: '接口地址需为 http(s) 开头的合法 URL。',
-        endpointSavedRestart: '已保存；重启 Harness 后生效。',
+        endpointNotEditable: '请在 cordis.patch.yml 中修改接口地址。',
+        invalidBaseUrl: '请输入完整的 HTTP 或 HTTPS 地址。',
+        endpointSavedRestart: '已保存，重启 Harness 后生效。',
         save: '保存',
         saving: '保存中…',
         test: '测试连接',
         testing: '测试中…',
         clear: '清除 Key',
         clearing: '清除中…',
-        confirmClear: '确定要删除已保存的 FOFA API Key 吗？',
+        confirmClear: '清除已保存的 API Key？',
         saved: '已保存。',
         cleared: 'API Key 已清除。',
         testOk: '连接正常',
-        testFailed: '连接失败',
-        loadFailed: '配置接口不可达，请刷新页面重试。',
-        hintStorage:
-          'Key 保存在本机 Harness 凭据库（不写入 profile 配置文件、不回显），页面只显示尾号；也支持环境变量 FOFA_KEY 或插件配置 apiKey。',
-        hintGenerate:
-          'Key 获取方式：FOFA 个人中心 → API 密钥（或中转站 fafaapi.info 的 Key）。',
-        endpoint: '接口地址',
-        project: '项目地址',
-        quotaRelay: '中转站',
-        quotaStandard: '标准版',
-        quotaToday: '今日剩余',
-        quotaRemain: '剩余查询',
-        quotaExpiration: '到期',
+        reloadHint: '请刷新页面重试。',
+        hintStorage: 'Key 存入 Harness 凭据库，页面仅显示尾号。',
+        hintGenerate: '在 FOFA 个人中心获取 API Key。',
+        project: 'fofatoto 源码',
         'tool.account': 'FOFA 账号',
         'tool.search': 'FOFA 检索',
         'tool.export': 'FOFA 导出',
@@ -179,7 +141,7 @@ window.__ModuleLoader__.load({
         'tool.page': '页码',
         'tool.fields': '字段',
         'tool.limit': '条数上限',
-        'tool.all': '全部（受上限保护）',
+        'tool.all': '全部（有上限）',
         'tool.defaultLimit': '默认 1000',
         'tool.fill': '比例',
         'tool.full': '含历史数据',
@@ -209,8 +171,8 @@ window.__ModuleLoader__.load({
         'tool.written': '已写入',
         'tool.status': '停止原因',
         'tool.partial': '部分完成',
-        'tool.spilled': '结果过大已落盘（spill），卡片显示的是持久化预览。',
-        'tool.retryHint': '还没拉完：可用 appendTo 续拉。',
+        'tool.spilled': '完整结果已落盘。',
+        'tool.retryHint': '用 appendTo 继续导出。',
         'tool.relay': '中转站',
         'tool.standard': '标准版',
         'tool.reason.exhausted': '已取完',
@@ -253,11 +215,6 @@ window.__ModuleLoader__.load({
       };
     }
 
-    /**
-     * One endpoint template from the Host.
-     * @param {unknown} value raw status field
-     * @returns {string} trimmed string, or '' when the field is not a string
-     */
     function asText(value) {
       return typeof value === 'string' ? value.trim() : '';
     }
@@ -285,23 +242,18 @@ window.__ModuleLoader__.load({
       return false;
     }
 
-    /** Render one quota field without ever printing `undefined`/`null`, or '' when absent. */
-    function quotaField(label, value) {
-      if (!hasValue(value)) return '';
-      const text = String(value).trim();
-      return text === '' ? '' : `${label} ${text}`;
-    }
-
-    /** Build the quota summary line (`中转站 · 今日剩余 96 · 到期 2026-11-08`), omitting missing parts. */
     function formatQuota(quota, t) {
       if (quota === null || typeof quota !== 'object') return '';
-      const parts = [];
-      if (quota.type === 'relay') parts.push(t('quotaRelay'));
-      else if (quota.type === 'standard') parts.push(t('quotaStandard'));
-      parts.push(quotaField(t('quotaToday'), quota.todayRemaining));
-      parts.push(quotaField(t('quotaRemain'), quota.remainApiQuery));
-      parts.push(quotaField(t('quotaExpiration'), quota.expiration));
-      return parts.filter((part) => part !== '').join(' · ');
+      const type = quota.type === 'relay' || quota.type === 'standard' ? t(`tool.${quota.type}`) : '';
+      const fields = [
+        ['tool.today', quota.todayRemaining],
+        ['tool.remain', quota.remainApiQuery],
+        ['tool.expiration', quota.expiration],
+      ];
+      const parts = fields
+        .filter(([, value]) => hasValue(value))
+        .map(([label, value]) => `${t(label)} ${String(value).trim()}`);
+      return [type, ...parts].filter(Boolean).join(' · ');
     }
 
     /* -------------------------------------------------------------- */
@@ -750,7 +702,9 @@ window.__ModuleLoader__.load({
           fileItem,
         ]),
       ];
-      if (value.partial === true) nodes.push(cardNote(t('tool.retryHint'), 'warn'));
+      if (value.partial === true && value.format !== 'json' && asText(value.nextBefore) !== '') {
+        nodes.push(cardNote(t('tool.retryHint'), 'warn'));
+      }
       return nodes;
     }
 
@@ -902,15 +856,23 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** Read one JSON response, rejecting non-2xx and `ok: false` payloads. */
-    async function readJson(response) {
-      let payload;
-      try {
-        payload = await response.json();
-      } catch {
-        throw new Error(`HTTP ${response.status}`);
+    async function requestJson(path, body) {
+      const request = {
+        cache: 'no-store',
+        headers: { accept: 'application/json', 'x-dsh-fofatoto-plugin': '1' },
+      };
+      if (body !== undefined) {
+        request.method = 'POST';
+        request.headers['content-type'] = 'application/json';
+        request.body = JSON.stringify(body);
       }
-      if (!response.ok) throw new Error(typeof payload?.error === 'string' ? payload.error : `HTTP ${response.status}`);
+      const response = await fetch(path, request);
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok !== true) {
+        const message = asText(payload?.error) || asText(payload?.msg) || `HTTP ${response.status}`;
+        const code = payload?.apiCode;
+        throw new Error(code === null || code === undefined ? message : `${message} (${code})`);
+      }
       return payload;
     }
 
@@ -921,6 +883,7 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = React.useState('');
       const [notice, setNotice] = React.useState(null);
       const mounted = React.useRef(true);
+      const pending = React.useRef(false);
 
       const applyStatus = React.useCallback((next) => {
         if (!mounted.current) return;
@@ -928,43 +891,39 @@ window.__ModuleLoader__.load({
         setPhase('ready');
       }, []);
 
-      const load = React.useCallback(async () => {
-        try {
-          const response = await fetch(ROUTE_SETTINGS, {
-            cache: 'no-store',
-            headers: { accept: 'application/json', 'x-dsh-fofatoto-plugin': '1' },
-          });
-          const payload = await readJson(response);
-          applyStatus(payload);
-        } catch {
-          if (!mounted.current) return;
-          setPhase('error');
-        }
-      }, [applyStatus]);
-
       React.useEffect(() => {
+        let active = true;
         mounted.current = true;
-        void load();
+        void requestJson(ROUTE_SETTINGS).then(
+          (payload) => {
+            if (active) applyStatus(payload);
+          },
+          () => {
+            if (active) setPhase('error');
+          },
+        );
         return () => {
+          active = false;
           mounted.current = false;
         };
-      }, [load]);
+      }, [applyStatus]);
 
-      /** Run one card action, keeping a single busy flag and one result notice. */
       const run = React.useCallback(
-        async (kind, request, describe) => {
-          if (!mounted.current) return;
+        async (kind, path, body, onSuccess) => {
+          if (!mounted.current || pending.current) return;
+          pending.current = true;
           setBusy(kind);
           setNotice(null);
           try {
-            const result = await request();
+            const result = await requestJson(path, body);
             if (!mounted.current) return;
-            setNotice(describe(result));
-            if (result?.ok !== false && typeof result?.configured === 'boolean') applyStatus(result);
+            setNotice({ tone: 'ok', text: onSuccess(result) });
+            if (typeof result.configured === 'boolean') applyStatus(result);
           } catch (error) {
             if (!mounted.current) return;
             setNotice({ tone: 'error', text: error instanceof Error ? error.message : String(error) });
           } finally {
+            pending.current = false;
             if (mounted.current) setBusy('');
           }
         },
@@ -974,13 +933,13 @@ window.__ModuleLoader__.load({
       return { phase, status, busy, notice, setNotice, run };
     }
 
-    /** One compact status chip describing where the key comes from. */
-    function StatusChip({ t, status }) {
-      if (status === null || status === undefined) return h('span', { className: 'fft_chip', 'data-tone': 'muted' }, t('status.loading'));
-      if (status.configured !== true) return h('span', { className: 'fft_chip', 'data-tone': 'muted' }, t('status.missing'));
-      const source = t(`source.${status.source ?? 'none'}`);
-      const hint = typeof status.hint === 'string' && status.hint !== '' ? ` ${status.hint}` : '';
-      return h('span', { className: 'fft_chip', 'data-tone': 'ok' }, `${t('status.configured')} · ${source}${hint}`);
+    function StatusChip({ t, phase, status }) {
+      const props = { className: 'fft_chip' };
+      if (phase === 'error') return h('span', { ...props, 'data-tone': 'error' }, t('status.error'));
+      if (phase === 'loading') return h('span', props, t('status.loading'));
+      if (status?.configured !== true) return h('span', props, t('status.missing'));
+      const source = [t(`source.${status.source ?? 'none'}`), asText(status.hint)].filter(Boolean).join(' ');
+      return h('span', { ...props, 'data-tone': 'ok' }, `${t('status.configured')} · ${source}`);
     }
 
     /** The configuration card rendered in the bundle's page on the Plugins page. */
@@ -988,160 +947,65 @@ window.__ModuleLoader__.load({
       const t = React.useMemo(() => makeTranslator(props?.t), [props?.t]);
       const { phase, status, busy, notice, setNotice, run } = useSettingsCard();
       const [draft, setDraft] = React.useState('');
-      const [baseDraft, setBaseDraft] = React.useState('');
+      const [baseDraft, setBaseDraft] = React.useState(null);
       const [quotaText, setQuotaText] = React.useState('');
-      const ready = phase === 'ready' && status !== null;
-      const configured = ready && status.configured === true;
-      /** Only an explicit `false` pins the base URL; older Hosts omit the flag. */
+      const ready = phase === 'ready';
+      const idle = ready && busy === '';
+      const configured = status?.configured === true;
       const editable = ready && status.editable !== false;
       const draftKey = draft.trim();
-      const baseKey = baseDraft.trim();
-      const baseUrlValid = isValidBaseUrl(baseKey);
-      const savedBaseUrl = ready ? asText(status.baseUrl) : '';
-      const baseChanged = baseKey !== savedBaseUrl;
-      const dirty = draftKey !== '' || baseChanged;
+      const savedBaseUrl = asText(status?.baseUrl);
+      const baseInput = baseDraft ?? savedBaseUrl;
+      const baseUrl = baseInput.trim();
+      const baseUrlValid = isValidBaseUrl(baseUrl);
+      const baseChanged = editable && baseUrl !== savedBaseUrl;
+      const canSave = idle && (draftKey !== '' || baseChanged) && (!baseChanged || baseUrlValid);
+      const canTest = idle && baseUrlValid && (draftKey !== '' || configured);
+      const canClear = configured && status.source === 'credential';
+      const feedback = phase === 'error' ? { tone: 'error', text: t('reloadHint') } : notice;
 
-      React.useEffect(() => {
-        if (phase === 'error') setNotice({ tone: 'error', text: t('loadFailed') });
-        else if (phase === 'ready') setNotice(null);
-      }, [phase, setNotice, t]);
-
-      // Prefill (and re-sync after save/clear) the base URL draft from the Host.
-      React.useEffect(() => {
-        if (status === null || typeof status !== 'object') return;
-        setBaseDraft(typeof status.baseUrl === 'string' ? status.baseUrl : '');
-      }, [status]);
-
-      const save = React.useCallback(() => {
-        if (busy !== '') return;
-        const hasKey = draftKey !== '';
-        // Endpoint edits need the Host config editor; a key-only save does not.
-        if (!editable && !hasKey) {
-          setNotice({ tone: 'error', text: t('endpointNotEditable') });
-          return;
-        }
-        if (editable && !baseUrlValid) {
-          setNotice({ tone: 'error', text: t('invalidBaseUrl') });
-          return;
-        }
-        if (!dirty) return;
+      function save() {
+        if (!canSave) return;
         setQuotaText('');
-        const apiKey = draftKey;
-        void run(
-          'save',
-          async () => {
-            const body = {};
-            if (editable) body.baseUrl = baseKey;
-            if (apiKey !== '') body.apiKey = apiKey;
-            const response = await fetch(ROUTE_SETTINGS, {
-              method: 'POST',
-              cache: 'no-store',
-              headers: {
-                'content-type': 'application/json',
-                accept: 'application/json',
-                'x-dsh-fofatoto-plugin': '1',
-              },
-              body: JSON.stringify(body),
-            });
-            const payload = await readJson(response);
-            if (payload.ok === false) throw new Error(payload.error ?? 'save failed');
-            return payload;
-          },
-          (result) => {
-            setDraft('');
-            if (typeof result?.baseUrl === 'string') setBaseDraft(result.baseUrl);
-            return {
-              tone: 'ok',
-              text: result?.reconfigApplied === false ? t('endpointSavedRestart') : t('saved'),
-            };
-          },
-        );
-      }, [busy, editable, baseUrlValid, dirty, draftKey, baseKey, run, setNotice, t]);
-
-      const test = React.useCallback(() => {
-        if (busy !== '') return;
-        if (!baseUrlValid) {
-          setNotice({ tone: 'error', text: t('invalidBaseUrl') });
-          return;
-        }
-        setQuotaText('');
-        const apiKey = draftKey;
-        void run(
-          'test',
-          async () => {
-            const body = { baseUrl: baseKey };
-            if (apiKey !== '') body.apiKey = apiKey;
-            const response = await fetch(ROUTE_TEST, {
-              method: 'POST',
-              cache: 'no-store',
-              headers: {
-                'content-type': 'application/json',
-                accept: 'application/json',
-                'x-dsh-fofatoto-plugin': '1',
-              },
-              body: JSON.stringify(body),
-            });
-            const payload = await readJson(response);
-            if (payload.ok !== true) {
-              const detail = typeof payload.msg === 'string' && payload.msg !== '' ? payload.msg : t('testFailed');
-              const code = payload.apiCode === null || payload.apiCode === undefined ? '' : ` · code ${payload.apiCode}`;
-              throw new Error(`${detail}${code}`);
-            }
-            return payload;
-          },
-          (result) => {
-            setQuotaText(formatQuota(result.quota, t));
-            return {
-              tone: 'ok',
-              text: `${t('testOk')} · HTTP ${result.httpStatus} · ${result.latencyMs}ms`,
-            };
-          },
-        );
-      }, [busy, baseUrlValid, draftKey, baseKey, run, setNotice, t]);
-
-      const clear = React.useCallback(() => {
-        if (typeof window !== 'undefined' && typeof window.confirm === 'function' && !window.confirm(t('confirmClear'))) return;
-        setQuotaText('');
-        void run(
-          'clear',
-          async () => {
-            const response = await fetch(ROUTE_SETTINGS, {
-              method: 'POST',
-              cache: 'no-store',
-              headers: {
-                'content-type': 'application/json',
-                accept: 'application/json',
-                'x-dsh-fofatoto-plugin': '1',
-              },
-              body: JSON.stringify({ clear: true }),
-            });
-            const payload = await readJson(response);
-            if (payload.ok === false) throw new Error(payload.error ?? 'clear failed');
-            return payload;
-          },
-          () => ({ tone: 'ok', text: t('cleared') }),
-        );
-      }, [run, t]);
-
-      if (props?.view === 'summary') {
-        return h('span', { className: 'fft_summary' }, h(StatusChip, { t, status: ready ? status : null }));
+        const body = {};
+        if (baseChanged) body.baseUrl = baseUrl;
+        if (draftKey !== '') body.apiKey = draftKey;
+        void run('save', ROUTE_SETTINGS, body, (result) => {
+          setDraft('');
+          setBaseDraft(null);
+          return result.reconfigApplied === false ? t('endpointSavedRestart') : t('saved');
+        });
       }
 
-      const canSave = busy === '' && (draftKey !== ''
-        ? !editable || baseUrlValid
-        : editable && dirty && baseUrlValid);
-      const canTest = busy === '' && (draftKey !== '' || configured);
-      const canClear = configured && status?.source === 'credential' && busy === '';
+      function test() {
+        if (!canTest) return;
+        setQuotaText('');
+        const body = { baseUrl };
+        if (draftKey !== '') body.apiKey = draftKey;
+        void run('test', ROUTE_TEST, body, (result) => {
+          setQuotaText(formatQuota(result.quota, t));
+          return t('testOk');
+        });
+      }
+
+      function clear() {
+        if (!idle || !canClear) return;
+        if (typeof window.confirm === 'function' && !window.confirm(t('confirmClear'))) return;
+        setQuotaText('');
+        void run('clear', ROUTE_SETTINGS, { clear: true }, () => t('cleared'));
+      }
+
+      function saveOnEnter(event) {
+        if (event.key === 'Enter') save();
+      }
+
+      const chip = h(StatusChip, { t, phase, status });
+      if (props?.view === 'summary') return h('span', { className: 'fft_summary' }, chip);
 
       return h(
         'div',
         { className: 'fft_card' },
-        h(
-          'div',
-          { className: 'fft_header' },
-          h('span', { className: 'fft_title' }, t('title')),
-          h(StatusChip, { t, status: ready ? status : null }),
-        ),
+        chip,
         h(
           'label',
           { className: 'fft_field' },
@@ -1153,14 +1017,12 @@ window.__ModuleLoader__.load({
             autoComplete: 'off',
             spellCheck: false,
             placeholder: t('keyPlaceholder'),
-            disabled: busy !== '' || phase !== 'ready',
+            disabled: !idle,
             onChange: (event) => {
               setDraft(event.target.value);
               if (notice !== null && notice.tone === 'error') setNotice(null);
             },
-            onKeyDown: (event) => {
-              if (event.key === 'Enter' && canSave) save();
-            },
+            onKeyDown: saveOnEnter,
           }),
         ),
         h(
@@ -1174,22 +1036,19 @@ window.__ModuleLoader__.load({
               className: 'fft_input',
               type: 'text',
               inputMode: 'url',
-              value: baseDraft,
+              value: baseInput,
               autoComplete: 'off',
               spellCheck: false,
-              placeholder: t('baseUrlPlaceholder'),
-              disabled: busy !== '' || phase !== 'ready' || !editable,
+              placeholder: 'https://fofa.info',
+              disabled: !idle || !editable,
               onChange: (event) => {
                 setBaseDraft(event.target.value);
                 if (notice !== null && notice.tone === 'error') setNotice(null);
               },
               onBlur: () => {
-                const value = baseDraft.trim();
-                if (value !== '' && !isValidBaseUrl(value)) setNotice({ tone: 'error', text: t('invalidBaseUrl') });
+                if (baseChanged && !baseUrlValid) setNotice({ tone: 'error', text: t('invalidBaseUrl') });
               },
-              onKeyDown: (event) => {
-                if (event.key === 'Enter' && canSave) save();
-              },
+              onKeyDown: saveOnEnter,
             }),
           ),
           ready && !editable ? h('p', { className: 'fft_hint' }, t('endpointNotEditable')) : null,
@@ -1210,35 +1069,27 @@ window.__ModuleLoader__.load({
           canClear
             ? h(
                 'button',
-                { type: 'button', className: 'fft_button fft_danger', disabled: busy !== '', onClick: clear },
+                { type: 'button', className: 'fft_button fft_danger', disabled: !idle, onClick: clear },
                 busy === 'clear' ? t('clearing') : t('clear'),
               )
             : null,
         ),
-        notice !== null ? h('div', { className: 'fft_notice', 'data-tone': notice.tone }, notice.text) : null,
+        feedback !== null ? h('div', { className: 'fft_notice', 'data-tone': feedback.tone, role: 'status' }, feedback.text) : null,
         quotaText !== '' ? h('p', { className: 'fft_quota' }, quotaText) : null,
         h('p', { className: 'fft_hint' }, t('hintStorage')),
         h('p', { className: 'fft_hint' }, t('hintGenerate')),
         h(
-          'p',
-          { className: 'fft_hint' },
-          `${t('project')}: `,
-          h(
-            'a',
-            { className: 'fft_link', href: PROJECT_URL, target: '_blank', rel: 'noopener noreferrer' },
-            PROJECT_URL,
-          ),
+          'a',
+          { className: 'fft_hint fft_link', href: PROJECT_URL, target: '_blank', rel: 'noopener noreferrer' },
+          t('project'),
         ),
-        h('p', { className: 'fft_meta' }, `${t('endpoint')}: ${ready ? savedBaseUrl || '—' : '—'}`),
       );
     }
 
     const CSS = `
 .fft_summary{color:var(--dsw-alias-label-secondary);font-size:inherit}
 .fft_card{gap:8px;display:grid;max-width:100%}
-.fft_header{align-items:center;justify-content:space-between;gap:12px;display:flex;flex-wrap:wrap}
-.fft_title{color:var(--dsw-alias-label-primary);font-weight:500;font-size:13px;line-height:20px}
-.fft_chip{box-sizing:border-box;border-radius:999px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-interactive-bg-hover);white-space:nowrap;font-size:11px;line-height:18px;padding:1px 8px;border:none}
+.fft_chip{box-sizing:border-box;border-radius:999px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-interactive-bg-hover);white-space:nowrap;font-size:11px;line-height:18px;padding:1px 8px;border:none;justify-self:start}
 .fft_chip[data-tone=ok]{color:var(--dsw-alias-state-success-primary)}
 .fft_field{gap:6px;display:grid}
 .fft_fieldLabel{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
@@ -1258,11 +1109,9 @@ window.__ModuleLoader__.load({
 .fft_notice[data-tone=error]{color:var(--dsw-alias-state-error-primary)}
 .fft_quota{color:var(--dsw-alias-label-secondary);margin:0;font-size:12px;line-height:18px;word-break:break-word}
 .fft_hint{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11px;line-height:1.6}
-.fft_link{color:var(--dsw-alias-brand-primary);text-decoration:none;word-break:break-all}
+.fft_link{color:var(--dsw-alias-brand-primary);text-decoration:none;justify-self:start}
 .fft_link:hover{text-decoration:underline}
-.fft_meta{color:var(--dsw-alias-label-tertiary);margin:0;font-size:11px;line-height:1.6;word-break:break-all}
 .fft_chip[data-tone=error]{color:var(--dsw-alias-state-error-primary)}
-.fft_chip[data-tone=muted]{color:var(--dsw-alias-label-tertiary)}
 /* Conversation tool cards. Layout, states, and motion are copied from the
    shipped ToolRow / DisclosureRow / details card so a third-party tool reads
    like a first-party one; every class is plugin-local and every color comes

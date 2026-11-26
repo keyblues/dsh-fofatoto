@@ -3,7 +3,8 @@
  *
  * Run: node --test test/
  * Live API checks (cost quota) run only when FOFA_TEST_KEY is set:
- *   $env:FOFA_TEST_KEY='...'; $env:FOFA_TEST_BASE='https://fafaapi.info'; node --test test/
+ *   $env:FOFA_TEST_KEY='...'; node --test test/
+ * FOFA_TEST_BASE overrides the official API URL.
  */
 
 import assert from 'node:assert/strict';
@@ -481,6 +482,7 @@ test('tool renders keep the canonical value parseable behind a summary line', ()
     '导出未完成（time-budget） · csv · 10000 行 · 总匹配 25000 → fofa-output/x.csv（可 appendTo 续拉）',
   );
   assert.match(renderExport(partialValue), /^导出未完成/u);
+  assert.doesNotMatch(exportSummary({ ...partialValue, format: 'json' }), /appendTo/u);
 });
 
 test('default fields exclude server and stay configurable', () => {
@@ -995,17 +997,30 @@ test('endpoint settings persist through the config editor contract', async () =>
           }
         : undefined,
   };
-  await saveEndpointConfig(ctx, { baseUrl: 'https://fafaapi.info' });
+  await saveEndpointConfig(ctx, 'https://fafaapi.info');
   assert.deepEqual(calls[0], { baseUrl: 'https://fafaapi.info', timeoutMs: 45000 });
-  await assert.rejects(() => saveEndpointConfig({ get: () => undefined }, { baseUrl: 'x' }), /不支持在插件页保存/u);
+  await assert.rejects(() => saveEndpointConfig({ get: () => undefined }, 'https://fofa.info'), /不支持在插件页保存/u);
   await assert.rejects(
-    () => saveEndpointConfig({ get: () => ({ entries: () => [], edit: async () => {} }) }, { baseUrl: 'x' }),
+    () => saveEndpointConfig({ get: () => ({ entries: () => [], edit: async () => {} }) }, 'https://fofa.info'),
     /找不到本插件/u,
   );
 });
 
-test('settings routes: guard, endpoint persistence and input validation', async () => {
+test('settings routes: guard, persistence, connection test and input validation', async (t) => {
   const edits = [];
+  const apiKeyEnv = 'DSH_FOFATOTO_TEST_FALLBACK_KEY';
+  const originalEnvKey = process.env[apiKeyEnv];
+  delete process.env[apiKeyEnv];
+  t.after(() => {
+    if (originalEnvKey === undefined) delete process.env[apiKeyEnv];
+    else process.env[apiKeyEnv] = originalEnvKey;
+  });
+  let storedKey;
+  const credentials = {
+    resolve: async () => storedKey,
+    set: async (_ref, key) => { storedKey = key; },
+    unset: async () => { storedKey = undefined; },
+  };
   // Legacy profile: the row id still mirrors the package name; the lookup must
   // fall back to the module name now that the bundle inserts `id: fofatoto`.
   const entry = { options: { id: 'dsh-fofatoto', name: 'dsh-fofatoto', config: {} } };
@@ -1014,9 +1029,7 @@ test('settings routes: guard, endpoint persistence and input validation', async 
       if (name === 'configEditor') {
         return { entries: () => [entry], edit: async (_target, change) => edits.push(change({}, {})) };
       }
-      if (name === 'credentials') {
-        return { resolve: async () => undefined, set: async () => {}, unset: async () => {} };
-      }
+      if (name === 'credentials') return credentials;
       return undefined;
     },
   };
@@ -1027,7 +1040,7 @@ test('settings routes: guard, endpoint persistence and input validation', async 
       return () => {};
     },
   };
-  registerRoutes(ctx, webServer, normalizeConfig({ baseUrl: 'https://fofa.info' }));
+  registerRoutes(ctx, webServer, normalizeConfig({ apiKeyEnv }));
   assert.equal(typeof handler, 'function');
 
   /** Drive the route handler with a fake Node req/res pair. */
@@ -1061,15 +1074,6 @@ test('settings routes: guard, endpoint persistence and input validation', async 
   assert.equal(status.body.editable, true);
   assert.equal(Object.hasOwn(status.body, 'accountSource'), false);
 
-  const saved = await call('POST', '/settings', { baseUrl: 'https://fafaapi.info' }, guard);
-  assert.equal(saved.status, 200);
-  assert.equal(saved.body.ok, true);
-  assert.equal(saved.body.saved, true);
-  assert.equal(saved.body.reconfigApplied, true);
-  assert.equal(saved.body.baseUrl, 'https://fafaapi.info');
-  assert.equal(edits.length, 1);
-  assert.equal(edits[0].baseUrl, 'https://fafaapi.info');
-
   const invalid = await call('POST', '/settings', { baseUrl: 'ftp://bad' }, guard);
   assert.equal(invalid.status, 200);
   assert.equal(invalid.body.ok, false);
@@ -1084,23 +1088,68 @@ test('settings routes: guard, endpoint persistence and input validation', async 
   assert.equal(noKey.status, 200);
   assert.equal(noKey.body.ok, false);
   assert.match(noKey.body.msg, /尚未配置/u);
+
+  const stored = await call('POST', '/settings', { apiKey: ' fixture-key-1234 ' }, guard);
+  assert.equal(stored.body.source, 'credential');
+  assert.equal(stored.body.hint, '••••1234');
+  assert.equal(edits.length, 0);
+
+  process.env[apiKeyEnv] = 'fixture-fallback-5678';
+  const cleared = await call('POST', '/settings', { clear: true }, guard);
+  assert.equal(cleared.body.cleared, true);
+  assert.equal(cleared.body.configured, true);
+  assert.equal(cleared.body.source, 'env');
+  assert.equal(cleared.body.hint, '••••5678');
+
+  const responses = [
+    Response.json({ error: false, remain_api_query: 42 }),
+    Response.json(null, { status: 403 }),
+  ];
+  const fetchAccountInfo = t.mock.method(globalThis, 'fetch', async () => responses.shift());
+  const tested = await call('POST', '/test', {}, guard);
+  assert.equal(tested.body.ok, true);
+  assert.equal(tested.body.quota.remainApiQuery, 42);
+  const [probeUrl] = fetchAccountInfo.mock.calls[0].arguments;
+  const endpoint = new URL(probeUrl);
+  assert.equal(endpoint.origin, 'https://fofa.info');
+  assert.equal(endpoint.pathname, '/api/v1/info/my');
+  assert.equal(endpoint.searchParams.get('key'), process.env[apiKeyEnv]);
+
+  const rejected = await call('POST', '/test', {}, guard);
+  assert.equal(rejected.body.ok, false);
+  assert.equal(rejected.body.httpStatus, 403);
+  assert.equal(rejected.body.apiCode, null);
+
+  const saved = await call('POST', '/settings', { baseUrl: 'https://fafaapi.info' }, guard);
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.ok, true);
+  assert.equal(saved.body.saved, true);
+  assert.equal(saved.body.reconfigApplied, true);
+  assert.equal(saved.body.baseUrl, 'https://fafaapi.info');
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].baseUrl, 'https://fafaapi.info');
 });
 
 /* ---------------------------------------------------------------- */
 /* Config                                                            */
 /* ---------------------------------------------------------------- */
 
-test('config normalization clamps and defaults', () => {
+test('config normalization clamps and uses the official API by default', async () => {
   const config = normalizeConfig({ baseUrl: 'https://relay.example.com/', timeoutMs: 1, retries: 99, maxExportRows: 9999999 });
   assert.equal(config.baseUrl, 'https://relay.example.com');
   assert.equal(config.timeoutMs, 5000);
   assert.equal(config.retries, 4);
   assert.equal(config.maxExportRows, 200000);
   assert.equal(normalizeConfig({ baseUrl: 'ftp://x' }).baseUrl, 'https://fofa.info');
-  assert.equal(normalizeConfig({}).defaultFields, DEFAULT_FIELDS);
-  assert.equal(normalizeConfig({}).maxExportSeconds, 240);
+  const defaults = normalizeConfig({});
+  assert.equal(defaults.baseUrl, 'https://fofa.info');
+  assert.equal(defaults.defaultFields, DEFAULT_FIELDS);
+  assert.equal(defaults.maxExportSeconds, 240);
   assert.equal(normalizeConfig({ maxExportSeconds: 1 }).maxExportSeconds, 5);
   assert.equal(normalizeConfig({ maxExportSeconds: 9999 }).maxExportSeconds, 540);
+
+  const patch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8');
+  assert.equal(patch.match(/^\s+baseUrl:[ \t]+(\S+)$/mu)?.[1], defaults.baseUrl);
 });
 
 /* ---------------------------------------------------------------- */
@@ -1108,7 +1157,7 @@ test('config normalization clamps and defaults', () => {
 /* ---------------------------------------------------------------- */
 
 const liveKey = process.env.FOFA_TEST_KEY ?? '';
-const liveBase = process.env.FOFA_TEST_BASE ?? 'https://fafaapi.info';
+const liveBase = process.env.FOFA_TEST_BASE ?? normalizeConfig().baseUrl;
 
 test('live: account info', { skip: liveKey === '' }, async () => {
   const config = normalizeConfig({ baseUrl: liveBase, timeoutMs: 45000, retries: 2 });

@@ -6,12 +6,12 @@
 [![DeepSeek Harness](https://img.shields.io/badge/DeepSeek-Harness-5b6bff?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933?style=flat-square)](package.json)
-[![DSH](https://img.shields.io/badge/DSH-0.2.1--rc.5%2B-4D6BFE?style=flat-square)](#兼容性与安全)
+[![DSH](https://img.shields.io/badge/DSH-0.1.7--rc.1_to_0.2.3--alpha.2-4D6BFE?style=flat-square)](#兼容性与安全)
 [![release](https://img.shields.io/github/v/release/keyblues/dsh-fofatoto?style=flat-square)](https://github.com/keyblues/dsh-fofatoto/releases)
 
-> **English** — FOFA cyberspace mapping for DeepSeek Harness (DSH): three native agent tools — `fofa_account` (account quota), `fofa_search` (one query page with the matching rows and total count), and `fofa_export` (time-cursor deep paging into CSV/JSON/TXT files inside the session workspace, resumable from a saved cursor). Every export batch is written and fsynced immediately, so a run that hits its time budget or an upstream error keeps what it already fetched. The API key is configured on the plugin page and stored in the Harness credential store.
+> Check FOFA quota, search assets, and export results to CSV, JSON, or TXT in DeepSeek Harness (DSH). Save your API key on the plugin page.
 
-fofatoto（FOFA 网络空间测绘）的 DSH 插件：把 [fofatoto](https://github.com/keyblues/fofatoto) 里的 FOFA 查询语义搬进 DSH，让 Agent 直接调用工具，而不是拼 shell 调 exe。移植代码与 fofatoto 同源（GPL-3.0），本插件沿用 GPL-3.0-or-later。
+在 DSH 中查询 FOFA 额度、检索资产和导出结果。查询逻辑移植自 [fofatoto](https://github.com/keyblues/fofatoto)。
 
 ## 特性
 
@@ -31,7 +31,7 @@ fofatoto（FOFA 网络空间测绘）的 DSH 插件：把 [fofatoto](https://git
 ```text
 plugin_manager install_bundle  target: dsh-fofatoto
 # 或固定版本
-plugin_manager install_bundle  target: dsh-fofatoto@0.1.6
+plugin_manager install_bundle  target: dsh-fofatoto@0.1.7
 ```
 
 ### 从 GitHub Release 安装（离线、固定版本）
@@ -100,7 +100,7 @@ Web 端在 `tool.call.toolview` 注册三张专用卡片（默认收起、点击
 
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
-| `baseUrl` | `https://fafaapi.info` | 接口地址。默认按中转站；官方账号改成 `https://fofa.info`，也可在插件页卡片直接改（热重载生效） |
+| `baseUrl` | `https://fofa.info` | 默认使用 FOFA 官方 API，可在插件页修改 |
 | `credentialRef` | `FOFA_API_KEY` | Harness 凭据库引用名 |
 | `apiKeyEnv` | `FOFA_KEY` | 环境变量名（兜底） |
 | `apiKey` | 空 | 直接写 Key（优先级最高，不推荐） |
@@ -115,15 +115,9 @@ Web 端在 `tool.call.toolview` 注册三张专用卡片（默认收起、点击
 
 **Key 解析顺序**：`config.apiKey` → 凭据库 `FOFA_API_KEY` → 环境变量 `FOFA_KEY` → `fofatotoConfigPath` 的 `config.json`。推荐在「插件」页粘贴 Key 保存（只显示尾号）。
 
-**中转站识别**：账号信息接口内置 `RELAY_INFO_APIS` 表，按域名后缀匹配（`fafaapi.info` → 中转站接口，其余 → 官方 `/api/v1/info/my`），要接新中转站改这张表即可，不新增配置项。切换官方账号：
+已保存的 `baseUrl` 优先于默认值。使用中转站时，在插件页填写其接口地址。插件会按域名选择账号接口，已知中转站见 `RELAY_INFO_APIS`。
 
-```yaml
-- id: fofatoto
-  config:
-    baseUrl: https://fofa.info
-```
-
-> 插件行的 Loader id 是 `fofatoto`，模块名（包名）是 `dsh-fofatoto`，两者刻意不同。
+> Loader 行 ID 为 `fofatoto`，包名为 `dsh-fofatoto`。
 
 ## 与资产收集流程对接
 
@@ -168,7 +162,7 @@ npx npm@latest trust github dsh-fofatoto \
 
 ## 兼容性与安全
 
-- Node.js ≥ 20；DSH 版本范围由 `engines.dsh` 声明（`>=0.2.1-rc.5 <0.3.0-0`），装错版本 DSH 会拒绝安装。
+- 插件要求 Node.js ≥ 20。DSH 兼容范围为 `>=0.1.7-rc.1 <=0.2.3-alpha.2`，由 `engines.dsh` 声明。
 - API Key 只存在本机（凭据库/环境变量/你的 fofatoto 配置），不写日志、不回显、不随工具结果返回。
 - 插件路由与插件页同源并要求自定义请求头，跨站页面无法静默改写 Key；导出文件落在会话工作区内，文件名做了目录穿越过滤。
 - 额度保护：`maxExportRows` 上限 + `fofa_account` 前置检查；`fofa_export` 并发不安全（同时多次导出会互相抢额度）。

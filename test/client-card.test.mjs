@@ -226,7 +226,70 @@ test('settings card links to the upstream fofatoto project', async () => {
   assert.equal(link.props.href, 'https://github.com/keyblues/fofatoto');
   assert.equal(link.props.target, '_blank');
   assert.equal(link.props.rel, 'noopener noreferrer');
-  assert.match(textsOf(tree).join('|'), /https:\/\/github\.com\/keyblues\/fofatoto/u);
+  assert.equal(textsOf(link).join(''), 'fofatoto 源码');
+  assert.equal(find(tree, (node) => node.props?.inputMode === 'url').props.placeholder, 'https://fofa.info');
+});
+
+test('settings card loads, saves, tests and clears through guarded JSON requests', async (t) => {
+  const { registrations, react } = await loadClient();
+  const card = registrations.find((entry) => entry.options.name === 'plugins.bundle.config').component;
+  const initial = { ok: true, configured: false, source: 'none', baseUrl: 'https://fofa.info' };
+  const saved = { ...initial, configured: true, source: 'credential', hint: '••••1234' };
+  const responses = [
+    initial,
+    saved,
+    { ok: true, quota: { type: 'relay', todayRemaining: 0 } },
+    { ...initial, cleared: true },
+  ];
+  const request = t.mock.method(globalThis, 'fetch', async () => Response.json(responses.shift()));
+  const effects = [];
+  react.useEffect = (effect) => effects.push(effect);
+  const render = () => {
+    react.begin();
+    return card({ view: 'page' });
+  };
+  const settle = async () => {
+    await new Promise((resolve) => setImmediate(resolve));
+    return render();
+  };
+  const input = (tree, type) => find(tree, (node) => node.type === 'input' && node.props.type === type);
+  const button = (tree, label) => find(tree, (node) => node.type === 'button' && textsOf(node).join('') === label);
+  const change = (tree, type, value) => input(tree, type).props.onChange({ target: { value } });
+
+  render();
+  react.useEffect = () => {};
+  for (const effect of effects) t.after(effect());
+
+  let tree = await settle();
+  assert.equal(input(tree, 'text').props.value, 'https://fofa.info');
+  change(tree, 'password', ' fixture-key-1234 ');
+  button(render(), '保存').props.onClick();
+  tree = await settle();
+  assert.equal(input(tree, 'password').props.value, '');
+  assert.match(textsOf(tree).join('|'), /已保存/u);
+
+  change(tree, 'text', 'ftp://relay.example');
+  assert.equal(button(render(), '测试连接').props.disabled, true);
+  change(tree, 'text', 'https://relay.example');
+  button(render(), '测试连接').props.onClick();
+  tree = await settle();
+  assert.match(textsOf(tree).join('|'), /连接正常.*今日剩余 0/u);
+  button(tree, '清除 Key').props.onClick();
+  assert.equal(button(render(), '清除中…').props.disabled, true);
+  assert.match(textsOf(await settle()).join('|'), /API Key 已清除/u);
+
+  const calls = request.mock.calls.map(({ arguments: [path, options] }) => {
+    assert.equal(options.headers['x-dsh-fofatoto-plugin'], '1');
+    if (options.body === undefined) return [path, options.method ?? 'GET'];
+    assert.equal(options.headers['content-type'], 'application/json');
+    return [path, options.method, JSON.parse(options.body)];
+  });
+  assert.deepEqual(calls, [
+    ['/plugins/dsh-fofatoto/settings', 'GET'],
+    ['/plugins/dsh-fofatoto/settings', 'POST', { apiKey: 'fixture-key-1234' }],
+    ['/plugins/dsh-fofatoto/test', 'POST', { baseUrl: 'https://relay.example' }],
+    ['/plugins/dsh-fofatoto/settings', 'POST', { clear: true }],
+  ]);
 });
 
 test('tool cards use the shipped row contract: root state, glyph, disclosure row', async () => {

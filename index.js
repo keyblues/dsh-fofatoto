@@ -1,31 +1,4 @@
-/**
- * dsh-fofatoto — FOFA cyberspace mapping for DeepSeek Harness (Host half).
- *
- * Three model-facing tools over the FOFA HTTP API:
- *   - `fofa_account` — account type, key validity, remaining quota, expiry
- *   - `fofa_search`  — one query page, structured rows plus match total
- *   - `fofa_export`  — deep fetch (cursor pagination for >10000 rows) into CSV/JSON/TXT
- *
- * Plus three same-origin JSON routes consumed by this bundle's Client half
- * (client.js), which the Plugins page renders inside this bundle's detail page:
- *   GET  {prefix}/settings   -> current key status (never the key itself)
- *   POST {prefix}/settings   -> save / clear the API key
- *   POST {prefix}/test       -> one live account probe (also returns quota)
- *
- * The query semantics are ported from fofatoto v1.9.0 (same author,
- * GPL-3.0): qbase64 encoding, custom `url` field synthesis, `before="time"`
- * cursor pagination for deep exports, per-host deduplication and relay account
- * detection. The local Web UI, CLI, update checker, web_auth gates and the
- * favicon/icon_hash pivoting of the Python tool are intentionally not ported —
- * DSH already exposes shell and file tools, so icon pivoting stays in
- * fofatoto (`fofatoto --icon <url>`, or its `favicon_hash()`), and its
- * `icon_hash="..."` result feeds straight into `fofa_search`.
- *
- * API key resolution order: config.apiKey -> Harness credentials
- * (config.credentialRef, default FOFA_API_KEY) -> environment variable
- * (config.apiKeyEnv, default FOFA_KEY) -> optional local fofatoto
- * `config.json` (config.fofatotoConfigPath).
- */
+/** FOFA tools and settings routes for DeepSeek Harness. */
 
 import { mkdir, open, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
@@ -87,7 +60,8 @@ class FofaApiError extends Error {
     super(message);
     this.name = 'FofaApiError';
     this.httpStatus = typeof options.httpStatus === 'number' ? options.httpStatus : 0;
-    this.apiCode = Number.isFinite(Number(options.apiCode)) ? Number(options.apiCode) : null;
+    const apiCode = Number(options.apiCode ?? NaN);
+    this.apiCode = Number.isFinite(apiCode) ? apiCode : null;
     this.fofaError = typeof options.fofaError === 'string' ? options.fofaError : '';
   }
 }
@@ -97,8 +71,9 @@ class FofaApiError extends Error {
 /* ------------------------------------------------------------------ */
 
 /** Read a non-empty trimmed string, else the fallback. */
-function text(value, fallback) {
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : fallback;
+function text(value, fallback = '') {
+  const trimmed = typeof value === 'string' ? value.trim() : '';
+  return trimmed || fallback;
 }
 
 /** Clamp a config number into `[min, max]`, falling back on non-numbers. */
@@ -178,18 +153,18 @@ function normalizeBaseUrl(value, fallback) {
 function normalizeConfig(raw) {
   const config = raw !== null && typeof raw === 'object' ? raw : {};
   return {
-    apiKey: typeof config.apiKey === 'string' ? config.apiKey.trim() : '',
+    apiKey: text(config.apiKey),
     credentialRef: text(config.credentialRef, DEFAULT_CREDENTIAL_REF),
     apiKeyEnv: text(config.apiKeyEnv, DEFAULT_API_KEY_ENV),
     baseUrl: normalizeBaseUrl(config.baseUrl, DEFAULT_BASE_URL),
     timeoutMs: clampNumber(config.timeoutMs, DEFAULT_TIMEOUT_MS, MIN_TIMEOUT_MS, MAX_TIMEOUT_MS),
     retries: clampNumber(config.retries, DEFAULT_RETRIES, MIN_RETRIES, MAX_RETRIES),
     defaultFields: text(config.defaultFields, DEFAULT_FIELDS),
-    outputDir: typeof config.outputDir === 'string' ? config.outputDir.trim() : '',
+    outputDir: text(config.outputDir),
     maxExportRows: clampNumber(config.maxExportRows, 50000, 1, MAX_EXPORT_ROWS_CAP),
     maxExportSeconds: clampNumber(config.maxExportSeconds, 240, 5, 540),
     rateLimitSeconds: clampNumber(config.rateLimitSeconds, 5, 0, 60),
-    fofatotoConfigPath: typeof config.fofatotoConfigPath === 'string' ? config.fofatotoConfigPath.trim() : '',
+    fofatotoConfigPath: text(config.fofatotoConfigPath),
   };
 }
 
@@ -201,45 +176,35 @@ function maskKey(key) {
   return `••••${value.slice(-4)}`;
 }
 
-/** Read `{ key, url }` from an optional local fofatoto config.json. */
-async function readFofatotoConfig(config) {
-  if (config.fofatotoConfigPath === '') return { key: '', url: '' };
+/** Read an optional API key from fofatoto's config.json. */
+async function readFofatotoKey(path) {
+  if (path === '') return '';
   try {
-    const parsed = JSON.parse(await readFile(config.fofatotoConfigPath, 'utf8'));
-    return {
-      key: typeof parsed?.key === 'string' ? parsed.key.trim() : '',
-      url: typeof parsed?.url === 'string' ? parsed.url.trim() : '',
-    };
+    const parsed = JSON.parse(await readFile(path, 'utf8'));
+    return text(parsed?.key);
   } catch {
-    return { key: '', url: '' };
+    return '';
   }
 }
 
-/** Resolve the key from the credential store, the environment or fofatoto config. */
-async function readStoredKey(ctx, config) {
+/** Resolve the key from config, credentials, the environment, or fofatoto's config. */
+async function resolveApiKey(ctx, config) {
+  if (config.apiKey !== '') return { key: config.apiKey, source: 'config' };
   const credentials = ctx.get('credentials');
-  if (credentials !== void 0 && typeof credentials.resolve === 'function') {
+  if (typeof credentials?.resolve === 'function') {
     try {
       const resolved = await credentials.resolve(config.credentialRef);
-      const value = typeof resolved === 'string' ? resolved : resolved?.value;
-      if (typeof value === 'string' && value.trim() !== '') {
-        return { key: value.trim(), source: 'credential' };
-      }
+      const key = text(typeof resolved === 'string' ? resolved : resolved?.value);
+      if (key !== '') return { key, source: 'credential' };
     } catch {
       // Fall through to the environment.
     }
   }
-  const fromEnvironment = typeof process.env[config.apiKeyEnv] === 'string' ? process.env[config.apiKeyEnv].trim() : '';
+  const fromEnvironment = text(process.env[config.apiKeyEnv]);
   if (fromEnvironment !== '') return { key: fromEnvironment, source: 'env' };
-  const local = await readFofatotoConfig(config);
-  if (local.key !== '') return { key: local.key, source: 'file' };
+  const fromFile = await readFofatotoKey(config.fofatotoConfigPath);
+  if (fromFile !== '') return { key: fromFile, source: 'file' };
   return { key: '', source: 'none' };
-}
-
-/** Resolve one call's key: literal config first, then the stored chain. */
-async function resolveApiKey(ctx, config) {
-  if (config.apiKey !== '') return { key: config.apiKey, source: 'config' };
-  return await readStoredKey(ctx, config);
 }
 
 /** Settings-card status; never returns the key itself. */
@@ -269,40 +234,25 @@ async function keyStatus(ctx, config) {
  * so a profile still carrying the old `dsh-fofatoto` row id (before the id was
  * split from the package name) keeps saving through the same code path.
  */
-async function saveEndpointConfig(ctx, changes) {
+async function saveEndpointConfig(ctx, baseUrl) {
   const editor = ctx.get('configEditor');
-  if (editor === undefined || typeof editor.edit !== 'function') {
+  if (typeof editor?.edit !== 'function') {
     throw new Error(ENDPOINT_UNEDITABLE_MESSAGE);
   }
   const entries = typeof editor.entries === 'function' ? editor.entries() : [];
   const entry = entries.find((candidate) => candidate?.options?.id === PLUGIN_ROW_ID)
     ?? entries.find((candidate) => candidate?.options?.name === PLUGIN_MODULE);
   if (entry === undefined) {
-    throw new Error(`找不到本插件在 profile 中的配置行（id: ${PLUGIN_ROW_ID}），无法保存接口地址；请改用 cordis.patch.yml。`);
+    throw new Error(`找不到本插件的配置行（${PLUGIN_ROW_ID}），请检查 cordis.patch.yml。`);
   }
-  await editor.edit(entry, (current) => {
-    const next = { ...(current ?? {}) };
-    for (const [key, value] of Object.entries(changes)) {
-      // An empty template means "back to auto-detect": drop the override.
-      if (typeof value === 'string' && value === '') delete next[key];
-      else next[key] = value;
-    }
-    return next;
-  });
+  await editor.edit(entry, (current) => ({ ...current, baseUrl }));
 }
 
-/** Shown wherever the Host cannot persist an endpoint override from the card. */
 const ENDPOINT_UNEDITABLE_MESSAGE =
-  `当前环境不支持在插件页保存接口地址：请修改本 profile 的 cordis.patch.yml 中 ${PLUGIN_ROW_ID} 行的 baseUrl。`;
+  `此环境不支持在插件页保存接口地址。请修改 cordis.patch.yml 中 ${PLUGIN_ROW_ID} 的 baseUrl。`;
 
-const MISSING_KEY_MESSAGE = [
-  '尚未配置 FOFA API Key。',
-  '配置方式（任选其一）：',
-  '1) 在 DSH「插件」页打开 dsh-fofatoto，在配置卡片中粘贴 API Key 并保存（推荐，写入本机 Harness 凭据库）；',
-  '2) 设置环境变量 FOFA_KEY 后重启 Harness；',
-  '3) 在本 profile 的 cordis.patch.yml 中为 fofatoto 行设置 config.apiKey；',
-  '4) 在插件配置里把 fofatotoConfigPath 指向本机 fofatoto 的 config.json，复用其中的 key。',
-].join('\n');
+const MISSING_KEY_MESSAGE = '尚未配置 FOFA API Key。请在 dsh-fofatoto 插件页保存 Key。';
+const INVALID_BASE_URL_MESSAGE = '接口地址不合法，请输入完整的 HTTP 或 HTTPS 地址。';
 
 /* ------------------------------------------------------------------ */
 /* FOFA HTTP API                                                       */
@@ -333,14 +283,13 @@ async function fetchJson(url, { timeoutMs, signal, what }) {
       payload = undefined;
     }
     if (!response.ok) {
-      const message =
-        payload !== undefined && typeof payload === 'object' && typeof payload.errmsg === 'string' && payload.errmsg !== ''
-          ? payload.errmsg
-          : `HTTP ${response.status}`;
-      throw new FofaApiError(`${what} HTTP ${response.status}`, { httpStatus: response.status, fofaError: message });
+      throw new FofaApiError(`${what} HTTP ${response.status}`, {
+        httpStatus: response.status,
+        fofaError: text(payload?.errmsg),
+      });
     }
     if (payload === undefined || payload === null || typeof payload !== 'object') {
-      throw new FofaApiError(`${what}返回了无法解析的响应（非 JSON）`, { httpStatus: response.status });
+      throw new FofaApiError(`${what}响应格式无效`, { httpStatus: response.status });
     }
     return { payload, httpStatus: response.status };
   } catch (error) {
@@ -387,31 +336,33 @@ async function withRetry(config, signal, operation) {
   throw lastError ?? new FofaApiError('FOFA 请求失败');
 }
 
-/** Turn an upstream or transport failure into an actionable model-facing error. */
+function apiErrorDetail(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return error instanceof FofaApiError && error.fofaError !== '' ? `${message} · ${error.fofaError}` : message;
+}
+
+/** Add a recovery hint to common FOFA errors. */
 function explainApiError(error) {
-  if (!(error instanceof FofaApiError)) {
-    return error instanceof Error ? error.message : String(error);
-  }
-  const detail = `${error.message}${error.fofaError === '' ? '' : `：${error.fofaError}`}`;
+  const detail = apiErrorDetail(error);
+  if (!(error instanceof FofaApiError)) return detail;
   if (error.httpStatus === 429 || /过于频繁|频率|too many|429/iu.test(detail)) {
-    return `${detail}\n请求被限流：FOFA 中转站对账户/检索接口有数秒级频率限制。稍等 5–10 秒再试；批量导出请把插件配置 rateLimitSeconds 调大。`;
+    return `${detail}\n请求过于频繁，请稍后重试。`;
   }
   if (/key|密钥|账号|账户|无效|未授权|unauthorized|auth/iu.test(detail)) {
-    return `${detail}\nAPI Key 无效或未授权：请在 DSH「插件」页打开 dsh-fofatoto 粘贴新的 FOFA API Key，或检查中转站地址是否正确（配置 baseUrl）。`;
+    return `${detail}\n请检查 API Key 和接口地址。`;
   }
   if (/额度|次数|限制|quota|余额|超出|exceed/iu.test(detail)) {
-    return `${detail}\n当前账号额度不足：先用 fofa_account 查看剩余额度，再缩小 size/limit、合并查询语句或稍后重试。`;
+    return `${detail}\n请检查账号额度和请求条数。`;
   }
   if (/参数|语法|syntax|query|换行/iu.test(detail)) {
-    return `${detail}\n查询语句或参数不合法：检查 FOFA 语法（如 domain="a.com" && port="443"），或去掉不支持的字段。`;
+    return `${detail}\n请检查 FOFA 查询语句和字段。`;
   }
   return detail;
 }
 
 /** Whether this Host can persist endpoint settings through the config editor. */
 function canEditConfig(ctx) {
-  const editor = ctx.get('configEditor');
-  return editor !== undefined && typeof editor.edit === 'function';
+  return typeof ctx.get('configEditor')?.edit === 'function';
 }
 
 /**
@@ -1061,15 +1012,6 @@ async function resolveOutputDir(ctx, config, exec) {
 /* Rendering                                                           */
 /* ------------------------------------------------------------------ */
 
-/**
- * Model-facing text of one tool value: compact JSON. The canonical value and
- * this body stay one-to-one with `output.schema`, so a program can parse it
- * without consulting the schema and the model reads the same shape PTC sees.
- */
-function renderJson(value) {
-  return JSON.stringify(value);
-}
-
 /** True for scalars that are safe to print in a summary line. */
 function hasScalar(value) {
   return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
@@ -1080,8 +1022,7 @@ function hasScalar(value) {
  * The JSON stays complete and machine-parseable; the line only adds orientation.
  */
 function renderWithSummary(summary, value) {
-  const body = renderJson(value);
-  return summary === '' ? body : `${summary}\n${body}`;
+  return `${summary}\n${JSON.stringify(value)}`;
 }
 
 /** Chinese summary line for `fofa_account` (account type, validity, quota). */
@@ -1121,7 +1062,8 @@ function exportSummary(value) {
   }
   const path = typeof value?.path === 'string' ? value.path : '';
   if (path === '') return bits.join(' · ');
-  const hint = partial && typeof value?.nextBefore === 'string' ? '（可 appendTo 续拉）' : '';
+  const resumable = partial && value.format !== 'json' && text(value.nextBefore) !== '';
+  const hint = resumable ? '（可 appendTo 续拉）' : '';
   return `${bits.join(' · ')} → ${path}${hint}`;
 }
 
@@ -1179,8 +1121,10 @@ function presentationRows(rows) {
 const FIELDS_PARAM = {
   type: 'string',
   description:
-    '逗号分隔字段，缺省 host,ip,port,protocol,domain,title。可选 host,ip,port,protocol,domain,title,server,country,city,lastupdatetime,asn,org,os,icp,jarm,header,banner,cert,product,product_category,version,cname,latitude,longitude,region,country_name,base_protocol,link，以及本地拼接的 url。',
+    `逗号分隔，默认 ${DEFAULT_FIELDS}。可选 ${ALL_FIELD_NAMES.join(',')} 和本地生成的 url。`,
 };
+const FULL_PARAM = { type: 'boolean', description: '包含一年前的数据，默认 false。' };
+const QUERY_REQUIRED_MESSAGE = '请填写 FOFA 查询语句（query）。';
 
 /**
  * Documented row columns for `output.schema`. Each value is an annotation-only
@@ -1201,12 +1145,11 @@ async function keyOrThrow(ctx, config) {
   return resolved;
 }
 
-/** Register the four model-facing tools. */
+/** Register the three FOFA tools. */
 function registerTools(ctx, config) {
   const accountTool = {
     name: 'fofa_account',
-    description:
-      '查询 FOFA 账号状态：账户类型（官方/中转站）、Key 是否有效、剩余查询额度、今日剩余与到期时间。测绘动手前先调用本工具，避免把额度耗在无效查询上。不消耗查询额度。',
+    description: '查看 FOFA 账号类型、Key 状态、剩余额度和到期时间，不消耗查询额度。',
     parameters: { type: 'object', additionalProperties: false, properties: {} },
     output: {
       schema: {
@@ -1222,12 +1165,12 @@ function registerTools(ctx, config) {
               type: { type: 'string', enum: ['standard', 'relay'] },
               valid: { type: 'boolean' },
               vip: { type: 'boolean' },
-              todayRemaining: scalarOrNullSchema('今日剩余查询数（中转站可能是数字、字符串或 null）'),
-              remainApiQuery: scalarOrNullSchema('剩余查询额度（官方为数字，部分中转站返回字符串）'),
-              expiration: { type: 'string', description: '到期时间；未知时为空串' },
-              firstUsed: { type: 'string', description: '首次使用时间；未知时为空串' },
-              vipLevel: scalarOrNullSchema('VIP 等级；未知时为 null'),
-              server: scalarOrNullSchema('fofa_server 标记；未知时为 null'),
+              todayRemaining: scalarOrNullSchema('今日剩余查询数'),
+              remainApiQuery: scalarOrNullSchema('剩余查询额度'),
+              expiration: { type: 'string', description: '到期时间，未知时为空字符串' },
+              firstUsed: { type: 'string', description: '首次使用时间，未知时为空字符串' },
+              vipLevel: scalarOrNullSchema('VIP 等级，未知时为 null'),
+              server: scalarOrNullSchema('fofa_server 标记，未知时为 null'),
               baseUrl: { type: 'string' },
             },
             required: [
@@ -1269,17 +1212,16 @@ function registerTools(ctx, config) {
 
   const searchTool = {
     name: 'fofa_search',
-    description:
-      '执行一条 FOFA 查询语句，返回匹配总数与本页结构化结果（每次调用消耗 1 次查询额度）。适合先看总量再决定是否全量导出；单页最多 1 万条，但超过数百条建议改用 fofa_export 落盘。结果过大时 Harness 会把本页内容落盘（spill）并在结果里给出路径，取数请用 fofa_export。语句示例：domain="example.com"、ip="1.2.3.0/24"、title="管理后台"、cert="example.com"。',
+    description: '执行 FOFA 查询，返回匹配总数和单页结果。每次调用消耗查询额度，文件导出用 fofa_export。',
     parameters: {
       type: 'object',
       additionalProperties: false,
       properties: {
         query: { type: 'string', description: 'FOFA 查询语句，例如 domain="example.com" && port="443"' },
-        size: { type: 'integer', description: '本次返回条数，1-10000，默认 50。建议先用小值看总量；大页结果会被 spill，取数请用 fofa_export。' },
-        page: { type: 'integer', description: '页码，默认 1。深翻页不稳定，全量请用 fofa_export。' },
+        size: { type: 'integer', description: '每页 1–10000 条，默认 50。' },
+        page: { type: 'integer', description: '页码，默认 1。' },
         fields: FIELDS_PARAM,
-        full: { type: 'boolean', description: '是否为 full 数据（含一年前历史数据），默认 false。' },
+        full: FULL_PARAM,
       },
       required: ['query'],
     },
@@ -1296,7 +1238,7 @@ function registerTools(ctx, config) {
           uniqueIps: { type: 'integer', description: '本页去重后的 IP 数' },
           rows: {
             type: 'array',
-            description: '本页结果行；列集合由 fields 决定，值保持 FOFA 原始形态',
+            description: '本页结果，按 fields 返回字段',
             items: {
               type: 'object',
               additionalProperties: true,
@@ -1324,8 +1266,8 @@ function registerTools(ctx, config) {
     timeoutMs: config.timeoutMs * config.retries + 30000,
     isConcurrencySafe: () => true,
     async execute(args, exec) {
-      const query = typeof args.query === 'string' ? args.query.trim() : '';
-      if (query === '') throw new Error('query 不能为空：请传入 FOFA 查询语句，例如 domain="example.com"。');
+      const query = text(args.query);
+      if (query === '') throw new Error(QUERY_REQUIRED_MESSAGE);
       const size = clampNumber(args.size, 50, 1, MAX_SEARCH_SIZE);
       const page = clampNumber(args.page, 1, 1, 100);
       const fields = text(args.fields, config.defaultFields);
@@ -1355,46 +1297,42 @@ function registerTools(ctx, config) {
 
   const exportTool = {
     name: 'fofa_export',
-    description:
-      '按查询语句全量拉取（自动用 before 游标翻页，可超过 1 万条）并增量写入工作区文件。每批请求后立即落盘：时间预算用尽或中途失败时已拉取的行不会丢失，可传 appendTo 断点续拉。支持 CSV（UTF-8 BOM，Excel 可直接打开）、TXT（URL/IP 列表）与 JSON。注意：会消耗多次查询额度，动手前先 fofa_account。',
+    description: '将 FOFA 结果分页写入工作区，支持 CSV、JSON 和 TXT。CSV 和 TXT 可从断点继续导出，按请求次数消耗额度。',
     parameters: {
       type: 'object',
       additionalProperties: false,
       properties: {
         query: {
           type: 'string',
-          description: 'FOFA 查询语句；多个目标可用 || 合并，例如 domain="a.com" || domain="b.com" || ip="1.2.3.4"。续拉时可省略（沿用元数据里的语句）。',
+          description: 'FOFA 查询语句，从断点继续时可省略。',
         },
         limit: {
           type: 'integer',
-          description: '本次最多拉取条数，默认 1000；0 表示按匹配总数（受配置 maxExportRows 上限保护）。续拉时表示本次新增条数。',
+          description: '本次新增行数上限，默认 1000。填 0 时仅受 maxExportRows 限制。',
         },
         format: {
           type: 'string',
           enum: ['csv', 'json', 'txt'],
-          description: '导出格式，默认 csv；续拉时忽略（沿用文件格式）。',
+          description: '导出格式，默认 csv。从断点继续时沿用原格式。',
         },
         fields: FIELDS_PARAM,
         dedup: {
           type: 'string',
-          description: '去重字段（逗号分隔），默认按导出字段去重；常用 url、ip、ip,host、domain。',
+          description: '逗号分隔的去重字段，默认按导出字段去重。',
         },
         fill: {
           type: 'number',
-          description: '拉取比例 (0,1]，默认 1（即 limit 与总数取小）。总量极大时可用 0.8 省额度。',
+          description: '拉取比例 (0, 1]，默认 1。',
         },
         fileName: {
           type: 'string',
-          description: '输出文件名（不含目录），缺省自动用 fofa_results_时间戳。',
+          description: '文件名（不含目录），默认 fofa_results_时间戳。',
         },
         appendTo: {
           type: 'string',
-          description: '断点续拉：传上次结果里的 path（或 path.meta.json），从保存的游标继续追加到同一文件，不重复消耗已拉部分；JSON 不支持续拉。',
+          description: '传入上次返回的 path，继续导出 CSV 或 TXT。',
         },
-        full: {
-          type: 'boolean',
-          description: '是否为 full 数据（含一年前历史数据），默认 false。',
-        },
+        full: FULL_PARAM,
       },
       required: [],
     },
@@ -1419,7 +1357,7 @@ function registerTools(ctx, config) {
             enum: ['exhausted', 'limit', 'complete', 'time-budget', 'batch-cap', 'upstream-error', 'empty'],
           },
           nextBefore: {
-            description: 'FOFA 时间游标；null 表示没有剩余数据（可直接用于 appendTo 续拉）',
+            description: '下一批的时间游标，无可用游标时为 null',
             oneOf: [{ type: 'string' }, { type: 'null' }],
           },
           durationMs: { type: 'integer' },
@@ -1476,15 +1414,15 @@ function registerTools(ctx, config) {
     isConcurrencySafe: () => false,
     async execute(args, exec) {
       const startedAt = Date.now();
-      const appendToRaw = typeof args.appendTo === 'string' ? args.appendTo.trim() : '';
-      let query = typeof args.query === 'string' ? args.query.trim() : '';
+      const appendToRaw = text(args.appendTo);
+      let query = text(args.query);
       const formatArg = ['csv', 'json', 'txt'].includes(args.format) ? args.format : 'csv';
       const limit = clampNumber(args.limit, 1000, 0, MAX_EXPORT_ROWS_CAP);
       if (limit > config.maxExportRows) {
         throw new Error(`limit=${limit} 超过配置上限 maxExportRows=${config.maxExportRows}：请调小 limit，或调大插件配置里的 maxExportRows。`);
       }
       const requested = fieldList(text(args.fields, config.defaultFields));
-      const dedupFields = fieldList(typeof args.dedup === 'string' ? args.dedup : '');
+      const dedupFields = fieldList(args.dedup);
       const resolved = await keyOrThrow(ctx, config);
       const baseDirectory = await sessionBaseDirectory(ctx, exec);
 
@@ -1516,7 +1454,7 @@ function registerTools(ctx, config) {
         resumedCount = Number.isFinite(Number(meta.written)) ? Number(meta.written) : 0;
         append = true;
       } else {
-        if (query === '') throw new Error('query 不能为空：请传入 FOFA 查询语句，例如 domain="example.com"。');
+        if (query === '') throw new Error(QUERY_REQUIRED_MESSAGE);
         columns = [...requested];
         for (const field of dedupFields) if (!columns.includes(field)) columns.push(field);
         mode = format === 'txt' ? txtMode(columns) : 'url';
@@ -1676,18 +1614,18 @@ function readJsonBody(req) {
 /** Save or clear the API key in the Harness credential store. */
 async function writeApiKey(ctx, config, apiKey) {
   const credentials = ctx.get('credentials');
-  if (credentials === void 0 || typeof credentials.set !== 'function') {
-    throw new Error('Harness 凭据服务不可用，无法保存 API Key；请改用环境变量 FOFA_KEY 或插件配置 apiKey。');
+  if (typeof credentials?.set !== 'function') {
+    throw new Error('Harness 凭据库不可用。可用 FOFA_KEY 或 apiKey 配置。');
   }
   if (apiKey === '') {
     if (typeof credentials.unset !== 'function') {
-      throw new Error('Harness 凭据服务不支持删除 Key，无法清除已保存的 API Key。');
+      throw new Error('Harness 凭据库无法清除 API Key。');
     }
     await credentials.unset(config.credentialRef);
     return;
   }
   if (apiKey.length < 6 || apiKey.length > 512) {
-    throw new Error('API Key 长度应在 6–512 字符之间，请检查是否复制完整。');
+    throw new Error('API Key 长度应为 6–512 个字符。');
   }
   await credentials.set(config.credentialRef, apiKey);
 }
@@ -1717,106 +1655,74 @@ function registerRoutes(ctx, webServer, config) {
       if (req.method === 'POST' && sub === '/settings') {
         const body = await readJsonBody(req);
         const clearing = body.clear === true;
-        const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+        const apiKey = text(body.apiKey);
         const wantsKey = clearing || apiKey !== '';
         const wantsBaseUrl = typeof body.baseUrl === 'string';
         if (!wantsKey && !wantsBaseUrl) {
-          sendJson(res, 200, { ok: false, error: '缺少 apiKey / clear / baseUrl 字段' });
+          sendJson(res, 200, { ok: false, error: '请提供 API Key 或接口地址。' });
+          return;
+        }
+        const nextBaseUrl = wantsBaseUrl ? normalizeBaseUrl(body.baseUrl, '') : config.baseUrl;
+        if (nextBaseUrl === '') {
+          sendJson(res, 200, { ok: false, error: INVALID_BASE_URL_MESSAGE });
           return;
         }
         const editable = canEditConfig(ctx);
-        let nextBaseUrl = config.baseUrl;
-        let reconfigRequested = false;
-        if (wantsBaseUrl) {
-          const candidate = normalizeBaseUrl(body.baseUrl, '');
-          if (candidate === '') {
-            sendJson(res, 200, { ok: false, error: '接口地址不合法：需要 http(s) 开头的完整 URL，例如 https://fofa.info' });
-            return;
-          }
-          if (candidate !== config.baseUrl) {
-            if (!editable) {
-              sendJson(res, 200, {
-                ok: false,
-                error: ENDPOINT_UNEDITABLE_MESSAGE,
-              });
-              return;
-            }
-            nextBaseUrl = candidate;
-            reconfigRequested = true;
-          }
+        const baseChanged = nextBaseUrl !== config.baseUrl;
+        if (baseChanged && !editable) {
+          sendJson(res, 200, { ok: false, error: ENDPOINT_UNEDITABLE_MESSAGE });
+          return;
         }
-        // Resolve the key before mutating: the config edit reloads this plugin.
-        const current = await resolveApiKey(ctx, config);
-        let resolved = current;
-        if (wantsKey) {
-          try {
-            await writeApiKey(ctx, config, clearing ? '' : apiKey);
-          } catch (error) {
-            // User-input problems stay in-band so the card can show them.
-            sendJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
-            return;
-          }
-          resolved = clearing ? { key: '', source: 'none' } : { key: apiKey, source: 'credential' };
-        }
-        let reconfigApplied = false;
-        if (reconfigRequested) {
-          try {
-            await saveEndpointConfig(ctx, { baseUrl: nextBaseUrl });
-            reconfigApplied = true;
-          } catch (error) {
-            sendJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
-            return;
-          }
+        let resolved;
+        try {
+          if (wantsKey) await writeApiKey(ctx, config, clearing ? '' : apiKey);
+          // Resolve the effective key before the config edit reloads the plugin.
+          resolved = await resolveApiKey(ctx, config);
+          if (baseChanged) await saveEndpointConfig(ctx, nextBaseUrl);
+        } catch (error) {
+          sendJson(res, 200, { ok: false, error: error instanceof Error ? error.message : String(error) });
+          return;
         }
         const status = buildStatus({ ...config, baseUrl: nextBaseUrl }, resolved, editable);
         const result = clearing ? { ...status, cleared: true } : { ...status, saved: true };
-        if (reconfigApplied) result.reconfigApplied = true;
+        if (baseChanged) result.reconfigApplied = true;
         sendJson(res, 200, result);
         return;
       }
       if (req.method === 'POST' && sub === '/test') {
         const body = await readJsonBody(req);
-        const override = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
-        let effective = config;
-        try {
-          if (typeof body.baseUrl === 'string' && body.baseUrl.trim() !== '') {
-            const candidate = normalizeBaseUrl(body.baseUrl, '');
-            if (candidate === '') throw new Error('接口地址不合法：需要 http(s) 开头的完整 URL');
-            effective = { ...effective, baseUrl: candidate };
-          }
-        } catch (error) {
-          sendJson(res, 200, {
-            ok: false,
-            httpStatus: 0,
-            apiCode: null,
-            msg: error instanceof Error ? error.message : String(error),
-            latencyMs: 0,
-            source: override !== '' ? 'input' : 'none',
-            quota: { type: 'unknown', valid: false },
-          });
+        const override = text(body.apiKey);
+        const baseUrl = normalizeBaseUrl(text(body.baseUrl, config.baseUrl), '');
+        const failure = {
+          ok: false,
+          httpStatus: 0,
+          apiCode: null,
+          latencyMs: 0,
+          quota: { type: 'unknown', valid: false },
+        };
+        if (baseUrl === '') {
+          const source = override !== '' ? 'input' : 'none';
+          sendJson(res, 200, { ...failure, msg: INVALID_BASE_URL_MESSAGE, source });
           return;
         }
+        const effective = { ...config, baseUrl };
         const resolved = override !== '' ? { key: override, source: 'input' } : await resolveApiKey(ctx, effective);
         if (resolved.key === '') {
           sendJson(res, 200, {
-            ok: false,
-            httpStatus: 0,
-            apiCode: null,
-            msg: '尚未配置 API Key，无法测试。',
-            latencyMs: 0,
+            ...failure,
+            msg: '尚未配置 API Key。',
             source: resolved.source,
-            quota: { type: 'unknown', valid: false },
           });
           return;
         }
         const startedAt = Date.now();
         try {
-          const { account, httpStatus } = await fetchAccount({ config: effective, key: resolved.key, signal: new AbortController().signal });
+          const { account, httpStatus } = await fetchAccount({ config: effective, key: resolved.key });
           sendJson(res, 200, {
             ok: account.valid === true,
             httpStatus,
             apiCode: null,
-            msg: account.valid === true ? '连接成功' : '接口拒绝该 Key',
+            msg: account.valid === true ? '连接正常' : 'API Key 无效。',
             latencyMs: Date.now() - startedAt,
             source: resolved.source,
             quota: {
@@ -1828,20 +1734,13 @@ function registerRoutes(ctx, webServer, config) {
             },
           });
         } catch (error) {
-          const detail =
-            error instanceof FofaApiError && error.fofaError !== ''
-              ? `${error.message}：${error.fofaError}`
-              : error instanceof Error
-                ? error.message
-                : String(error);
           sendJson(res, 200, {
-            ok: false,
+            ...failure,
             httpStatus: error instanceof FofaApiError ? error.httpStatus : 0,
             apiCode: error instanceof FofaApiError ? error.apiCode : null,
-            msg: detail,
+            msg: apiErrorDetail(error),
             latencyMs: Date.now() - startedAt,
             source: resolved.source,
-            quota: { type: 'unknown', valid: false },
           });
         }
         return;
